@@ -5,6 +5,7 @@ import { customModel } from "@/lib/ai";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 import { detectAndMask } from "@/lib/ai/guardrails";
 import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
+import { guardrailLogger } from "@/lib/ai/logger";
 
 export async function POST(request: Request) {
 	const {
@@ -21,9 +22,10 @@ export async function POST(request: Request) {
 		return new Response("Unauthorized", { status: 401 });
 	}
 
-	console.log("[API Route] Guardrail settings received", {
-		guardrailEnabledEntities,
-		userEmail: session.user?.email,
+	guardrailLogger.info("API route: Request received", {
+		hasGuardrails: !!(guardrailEnabledEntities && guardrailEnabledEntities.length > 0),
+		entityTypes: guardrailEnabledEntities,
+		fileCount: selectedFilePathnames?.length ?? 0,
 	});
 
 	// Convert UIMessages to ModelMessages
@@ -55,8 +57,8 @@ export async function POST(request: Request) {
 					? lastUserMessageContent
 					: "";
 
-			console.log("[API Route] Sending UNMASKED query to RAG", {
-				query: ragQuery,
+			guardrailLogger.info("API route: Sending query to RAG", {
+				textLength: ragQuery.length,
 				fileCount: selectedFilePathnames.length,
 				hasGuardrails: !!(
 					guardrailEnabledEntities && guardrailEnabledEntities.length > 0
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
 				similarityThreshold,
 			});
 
-			console.log("[API Route] RAG search complete", {
+			guardrailLogger.info("API route: RAG search complete", {
 				chunksFound: similarChunks.length,
 			});
 
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
 					lastUserMessageContent,
 					guardrailEnabledEntities as GuardrailEntityType[],
 					session.user?.email ?? undefined,
+					"user_message",
 				);
 
 				maskedMessageText = maskedResult.checked_text;
@@ -106,8 +109,8 @@ export async function POST(request: Request) {
 					lastMessage.content = maskedResult.checked_text;
 				}
 
-				console.log("[API Route] Masked user message for AI (after RAG)", {
-					originalLength: lastUserMessageContent.length,
+				guardrailLogger.info("API route: Masked user message (after RAG)", {
+					textLength: lastUserMessageContent.length,
 					maskedLength: maskedResult.checked_text.length,
 					detected: maskedResult.detected,
 				});
@@ -128,22 +131,21 @@ export async function POST(request: Request) {
 									chunk.content,
 									guardrailEnabledEntities as GuardrailEntityType[],
 									session.user?.email ?? undefined,
+									"rag_chunk",
 								);
 
 								// Log if this chunk had guardrails masked
 								if (maskedResult.detected) {
-									console.log(
-										`[API Route] Masked RAG chunk ${idx + 1}/${similarChunks.length}`,
+									guardrailLogger.info(
+										`API route: Masked RAG chunk ${idx + 1}/${similarChunks.length}`,
 										{
-											hasGuardrails: true,
-											detectedEntities: maskedResult.detected_entities,
-											originalLength: chunk.content.length,
-											maskedLength: maskedResult.checked_text.length,
-											preview: chunk.content.substring(0, 100),
-											maskedPreview: maskedResult.checked_text.substring(
-												0,
-												100,
+											detected: true,
+											entityTypes: Object.keys(maskedResult.detected_entities).filter(
+												(key) =>
+													(maskedResult.detected_entities[key as GuardrailEntityType]?.length ?? 0) > 0,
 											),
+											textLength: chunk.content.length,
+											maskedLength: maskedResult.checked_text.length,
 										},
 									);
 								}
@@ -159,7 +161,7 @@ export async function POST(request: Request) {
 					(chunk, idx) => chunk.content !== similarChunks[idx]?.content,
 				).length;
 
-				console.log("[API Route] Masked RAG context chunks - Summary", {
+				guardrailLogger.info("API route: Masked RAG context chunks - Summary", {
 					totalChunks: similarChunks.length,
 					maskedChunks: maskedChunksCount,
 					unmaskedChunks: similarChunks.length - maskedChunksCount,
@@ -183,7 +185,7 @@ export async function POST(request: Request) {
 					content: contextText,
 				});
 
-				console.log("[API Route] Context instruction added", {
+				guardrailLogger.info("API route: Context instruction added", {
 					hasMaskedGuardrails,
 					instructionLength: contextInstruction.length,
 					contextChunksMasked: maskedChunksCount > 0,
@@ -205,10 +207,10 @@ export async function POST(request: Request) {
 				})
 			: customModel;
 
-	console.log("[API Route] Model configured", {
+	guardrailLogger.info("API route: Model configured", {
 		hasGuardrailMiddleware:
 			!!guardrailEnabledEntities && guardrailEnabledEntities.length > 0,
-		guardrailEnabledEntities,
+		entityTypes: guardrailEnabledEntities,
 		modelMessagesCount: modelMessages.length,
 	});
 
@@ -219,7 +221,7 @@ export async function POST(request: Request) {
 		? "You are a helpful assistant that answers questions based on the provided document context. IMPORTANT: When the user's question contains masked placeholders like <NUMBER>, <EMAIL>, or <RUSSIAN_NAME>, these represent real values that were used to retrieve the context. Match these placeholders with corresponding actual values in the context to answer the question. When context is available, prioritize it in your responses. Keep your responses concise, accurate, and grounded in the provided information."
 		: "You are a helpful assistant that answers questions based on the provided document context. When the context is available, prioritize it in your responses. Keep your responses concise, accurate, and grounded in the provided information.";
 
-	console.log("[API Route] System prompt configured", {
+	guardrailLogger.info("API route: System prompt configured", {
 		hasGuardrailInstructions: hasGuardrailsEnabled,
 		promptLength: systemPrompt.length,
 	});

@@ -6,6 +6,7 @@ import type {
 } from "@ai-sdk/provider";
 import type { GuardrailEntityType } from "../guardrails";
 import { detectAndMask, getDefaultGuardrailEntities } from "../guardrails";
+import { guardrailLogger } from "../logger";
 
 /**
  * Create Guardrail Middleware for AI SDK v5
@@ -21,7 +22,9 @@ export function createGuardrailMiddleware(
 ): LanguageModelV2Middleware {
 	const entitiesToUse = enabledEntities || getDefaultGuardrailEntities();
 
-	console.log("[Guardrail Middleware] Created with entities:", entitiesToUse);
+	guardrailLogger.info("Middleware created", {
+		entityTypes: entitiesToUse,
+	});
 
 	return {
 		transformParams: async ({
@@ -32,7 +35,7 @@ export function createGuardrailMiddleware(
 			type: "generate" | "stream";
 			model: LanguageModelV2;
 		}) => {
-			console.log("[Guardrail Middleware] transformParams called", {
+			guardrailLogger.info("Transform params called", {
 				type,
 				messageCount: Array.isArray(params.prompt) ? params.prompt.length : 0,
 			});
@@ -57,22 +60,24 @@ export function createGuardrailMiddleware(
 										part.text,
 									);
 									if (isAlreadyMasked) {
-										// Text is already masked, skip processing
+										guardrailLogger.debug("Text already masked, skipping", {
+											textLength: part.text.length,
+										});
 										return part;
 									}
 
-									const originalText = part.text;
 									const result = detectAndMask(
 										part.text,
 										entitiesToUse,
 										userEmail,
+										"middleware",
 									);
 									if (result.detected) {
 										maskedCount++;
-										console.log("[Guardrail Middleware] Masked user message", {
-											original: originalText,
-											masked: result.checked_text,
-											detectedEntities: result.detected_entities,
+										guardrailLogger.info("Masked user message in middleware", {
+											detected: result.detected,
+											textLength: part.text.length,
+											maskedLength: result.checked_text.length,
 										});
 										return {
 											...part,
@@ -93,7 +98,7 @@ export function createGuardrailMiddleware(
 					},
 				);
 
-				console.log("[Guardrail Middleware] Processing complete", {
+				guardrailLogger.info("Middleware processing complete", {
 					maskedMessages: maskedCount,
 					totalMessages: maskedPrompt.length,
 				});

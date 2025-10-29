@@ -1,5 +1,7 @@
 import { regex } from "arkregex";
 import type { GuardrailEntityType } from "./guardrails";
+import { guardrailLogger } from "./logger";
+import { trackDetection } from "./guardrail-telemetry";
 
 /**
  * Guardrail Detection result matching OpenAI Guardrails format
@@ -20,11 +22,13 @@ export interface GuardrailDetectionResult {
  * @param text - Text to detect and mask guardrails in
  * @param enabledEntities - Array of entity types to detect (defaults to all if not provided)
  * @param userEmail - Optional user email to exclude from masking
+ * @param context - Context for telemetry tracking (default: "other")
  */
 export function detectAndMask(
 	text: string,
 	enabledEntities?: GuardrailEntityType[],
 	userEmail?: string,
+	context: "user_message" | "rag_chunk" | "middleware" | "other" = "other",
 ): GuardrailDetectionResult {
 	const detected_entities: {
 		RUSSIAN_NAME?: string[];
@@ -37,10 +41,9 @@ export function detectAndMask(
 	const entitiesToDetect =
 		enabledEntities || (["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
 
-	console.log("[Guardrail Detection] Starting detection", {
+	guardrailLogger.info("Starting detection", {
 		textLength: text.length,
-		enabledEntities: entitiesToDetect,
-		textPreview: text.substring(0, 100),
+		entityTypes: entitiesToDetect,
 	});
 
 	// Pattern for Russian names (Cyrillic characters, typically 2-3 words capitalized)
@@ -58,10 +61,9 @@ export function detectAndMask(
 			russianNames.push(...nameMatches);
 			detected_entities.RUSSIAN_NAME = [...new Set(russianNames)]; // Remove duplicates
 
-			console.log(
-				"[Guardrail Detection] Russian names detected:",
-				detected_entities.RUSSIAN_NAME,
-			);
+			guardrailLogger.info("Russian names detected", {
+				entityCounts: { RUSSIAN_NAME: detected_entities.RUSSIAN_NAME.length },
+			});
 
 			// Mask Russian names
 			maskedText = maskedText.replace(russianNamePattern, "<RUSSIAN_NAME>");
@@ -86,10 +88,9 @@ export function detectAndMask(
 				numbers.push(...filteredNumbers);
 				detected_entities.NUMBER = [...new Set(numbers)]; // Remove duplicates
 
-				console.log(
-					"[Guardrail Detection] Numbers detected:",
-					detected_entities.NUMBER,
-				);
+				guardrailLogger.info("Numbers detected", {
+					entityCounts: { NUMBER: detected_entities.NUMBER.length },
+				});
 
 				// Mask numbers
 				maskedText = maskedText.replace(numberPattern, "<NUMBER>");
@@ -118,10 +119,9 @@ export function detectAndMask(
 				emails.push(...filteredEmails);
 				detected_entities.EMAIL = [...new Set(emails)]; // Remove duplicates
 
-				console.log(
-					"[Guardrail Detection] Emails detected:",
-					detected_entities.EMAIL,
-				);
+				guardrailLogger.info("Emails detected", {
+					entityCounts: { EMAIL: detected_entities.EMAIL.length },
+				});
 
 				// Mask only the emails that are not the user's email
 				maskedText = maskedText.replace(emailPattern, (match) => {
@@ -143,11 +143,32 @@ export function detectAndMask(
 			(detected_entities.EMAIL?.length ?? 0) > 0,
 	};
 
-	console.log("[Guardrail Detection] Detection complete", {
+	// Track telemetry
+	const entityTypes: GuardrailEntityType[] = Object.keys(detected_entities).filter(
+		(key) => (detected_entities[key as GuardrailEntityType]?.length ?? 0) > 0,
+	) as GuardrailEntityType[];
+
+	const entityCounts: Record<GuardrailEntityType, number> = {
+		RUSSIAN_NAME: detected_entities.RUSSIAN_NAME?.length ?? 0,
+		NUMBER: detected_entities.NUMBER?.length ?? 0,
+		EMAIL: detected_entities.EMAIL?.length ?? 0,
+	};
+
+	trackDetection(
+		result.detected,
+		entityTypes,
+		entityCounts,
+		text.length,
+		maskedText.length,
+		context,
+	);
+
+	guardrailLogger.info("Detection complete", {
 		detected: result.detected,
-		detected_entities,
-		originalText: text,
-		maskedText: result.checked_text,
+		entityTypes,
+		entityCounts,
+		textLength: text.length,
+		maskedLength: maskedText.length,
 	});
 
 	return result;
