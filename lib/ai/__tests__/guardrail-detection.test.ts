@@ -32,7 +32,10 @@ describe("detectAndMask - Russian Names", () => {
 		);
 	});
 
-	it("should detect lowercase Russian names (multi-word)", () => {
+	it("should NOT detect lowercase names (conservative approach to reduce false positives)", () => {
+		// CONSERVATIVE APPROACH: We intentionally DO NOT match lowercase names
+		// because they cause too many false positives with common phrases
+		// Russian names are almost always capitalized in proper text
 		const result = detectAndMask(
 			"иван иванов встретился с петр петров",
 			["RUSSIAN_NAME"],
@@ -40,10 +43,10 @@ describe("detectAndMask - Russian Names", () => {
 			"other",
 		);
 
-		expect(result.detected).toBe(true);
-		expect(result.detected_entities.RUSSIAN_NAME).toHaveLength(2);
+		expect(result.detected).toBe(false);
+		expect(result.detected_entities.RUSSIAN_NAME || []).toHaveLength(0);
 		expect(result.checked_text).toBe(
-			"<RUSSIAN_NAME> встретился с <RUSSIAN_NAME>",
+			"иван иванов встретился с петр петров",
 		);
 	});
 
@@ -81,6 +84,42 @@ describe("detectAndMask - Russian Names", () => {
 
 		expect(result.detected).toBe(false);
 		expect(result.checked_text).toBe("Добрый день! Спасибо!");
+	});
+
+	it("should NOT detect hotel/business terminology as names", () => {
+		// Regression test for false positives identified by senior engineer
+		// These were being incorrectly detected as RUSSIAN_NAME
+		const text =
+			"Служба поддержки. Стоимость услуг. Политика отеля. Незаезд запрещен. Бронирование номера.";
+
+		const result = detectAndMask(text, ["RUSSIAN_NAME"], undefined, "other");
+
+		// None of these business terms should be detected as names
+		expect(result.detected).toBe(false);
+		expect(result.checked_text).toBe(text);
+	});
+
+	it("should NOT detect common multi-word phrases as names", () => {
+		// Regression test: these phrases were incorrectly detected
+		const text =
+			"ночи проживания в отеле, отель взимает плату, случае незаезда гостя";
+
+		const result = detectAndMask(text, ["RUSSIAN_NAME"], undefined, "other");
+
+		// Common phrases should NOT be detected as names
+		expect(result.detected).toBe(false);
+		expect(result.checked_text).toBe(text);
+	});
+
+	it("should NOT detect single capitalized words as names", () => {
+		// Conservative approach: single words are too prone to false positives
+		const text = "Извините, Служба, Отель, Стоимость, Политика";
+
+		const result = detectAndMask(text, ["RUSSIAN_NAME"], undefined, "other");
+
+		// Single capitalized words should NOT be detected
+		expect(result.detected).toBe(false);
+		expect(result.checked_text).toBe(text);
 	});
 
 	it("should NOT detect Latin transliterated names (current limitation)", () => {

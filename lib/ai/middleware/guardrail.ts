@@ -5,7 +5,11 @@ import type {
 	LanguageModelV2Middleware,
 } from "@ai-sdk/provider";
 import type { GuardrailEntityType } from "../guardrails";
-import { detectAndMask, getDefaultGuardrailEntities } from "../guardrails";
+import {
+	TokenVault,
+	detectAndMask,
+	getDefaultGuardrailEntities,
+} from "../guardrails";
 import { guardrailLogger } from "../logger";
 
 /**
@@ -15,10 +19,12 @@ import { guardrailLogger } from "../logger";
  *
  * @param enabledEntities - Array of guardrail entity types to detect. Defaults to all if not provided.
  * @param userEmail - Optional user email to exclude from email masking
+ * @param tokenVault - Optional TokenVault to store original values for later unmasking
  */
 export function createGuardrailMiddleware(
 	enabledEntities?: GuardrailEntityType[],
 	userEmail?: string,
+	tokenVault?: TokenVault,
 ): LanguageModelV2Middleware {
 	const entitiesToUse = enabledEntities || getDefaultGuardrailEntities();
 
@@ -70,6 +76,7 @@ export function createGuardrailMiddleware(
 										entitiesToUse,
 										userEmail,
 										"middleware",
+										tokenVault,
 									);
 									if (result.detected) {
 										maskedCount++;

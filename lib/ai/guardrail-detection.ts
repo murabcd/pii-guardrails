@@ -2,6 +2,7 @@ import { regex } from "arkregex";
 import { trackDetection } from "./guardrail-telemetry";
 import type { GuardrailEntityType } from "./guardrails";
 import { guardrailLogger } from "./logger";
+import type { TokenVault } from "./token-vault";
 
 /**
  * Guardrail Detection result matching OpenAI Guardrails format
@@ -18,7 +19,7 @@ export interface GuardrailDetectionResult {
 
 /**
  * Whitelist of common Cyrillic words that are NOT names
- * This prevents false positives for months, countries, common words
+ * This prevents false positives for months, countries, common words, business terms, etc.
  */
 const CYRILLIC_WHITELIST = new Set([
 	// Months (capitalized and lowercase)
@@ -76,6 +77,8 @@ const CYRILLIC_WHITELIST = new Set([
 	"спасибо",
 	"Пожалуйста",
 	"пожалуйста",
+	"Извините",
+	"извините",
 	// Days of week
 	"Понедельник",
 	"понедельник",
@@ -91,7 +94,7 @@ const CYRILLIC_WHITELIST = new Set([
 	"суббота",
 	"Воскресенье",
 	"воскресенье",
-	// Common prepositions and conjunctions (lowercase only to avoid over-filtering)
+	// Common prepositions and conjunctions
 	"на",
 	"в",
 	"с",
@@ -113,13 +116,12 @@ const CYRILLIC_WHITELIST = new Set([
 	"между",
 	"перед",
 	"за",
-	// Common verbs that might be detected
+	// Common verbs
 	"был",
 	"была",
 	"было",
 	"были",
 	"есть",
-	"было",
 	"будет",
 	"будут",
 	"позвонил",
@@ -137,6 +139,82 @@ const CYRILLIC_WHITELIST = new Set([
 	"время",
 	"человек",
 	"дом",
+	"номер",
+	"телефон",
+	"адрес",
+	"почта",
+	"контакт",
+	// Hotel/Business terminology (CRITICAL for reducing false positives)
+	"Отель",
+	"отель",
+	"Гостиница",
+	"гостиница",
+	"Служба",
+	"служба",
+	"Стоимость",
+	"стоимость",
+	"Политика",
+	"политика",
+	"Незаезд",
+	"незаезд",
+	"Бронирование",
+	"бронирование",
+	"Проживание",
+	"проживание",
+	"Оплата",
+	"оплата",
+	"Услуга",
+	"услуга",
+	"Услуги",
+	"услуги",
+	"Размещение",
+	"размещение",
+	"Резервация",
+	"резервация",
+	"Регистрация",
+	"регистрация",
+	"Выезд",
+	"выезд",
+	"Заезд",
+	"заезд",
+	"Гость",
+	"гость",
+	"Гости",
+	"гости",
+	"Администрация",
+	"администрация",
+	"Ресепшн",
+	"ресепшн",
+	"Информация",
+	"информация",
+	// Common business words
+	"Компания",
+	"компания",
+	"Организация",
+	"организация",
+	"Предприятие",
+	"предприятие",
+	"Управление",
+	"управление",
+	"Департамент",
+	"департамент",
+	"Отдел",
+	"отдел",
+	// Verbs/adjectives that appear capitalized
+	"Чтобы",
+	"чтобы",
+	"Если",
+	"если",
+	"Когда",
+	"когда",
+	"Нужна",
+	"нужна",
+	"Можем",
+	"можем",
+	"Вы",
+	"вы",
+	"Для",
+	"для",
 ]);
 
 /**
@@ -153,12 +231,14 @@ function isWhitelisted(word: string): boolean {
  * @param enabledEntities - Array of entity types to detect (defaults to all if not provided)
  * @param userEmail - Optional user email to exclude from masking
  * @param context - Context for telemetry tracking (default: "other")
+ * @param tokenVault - Optional TokenVault to store original values for later unmasking
  */
 export function detectAndMask(
 	text: string,
 	enabledEntities?: GuardrailEntityType[],
 	userEmail?: string,
 	context: "user_message" | "rag_chunk" | "middleware" | "other" = "other",
+	tokenVault?: TokenVault,
 ): GuardrailDetectionResult {
 	const detected_entities: {
 		RUSSIAN_NAME?: string[];
@@ -172,6 +252,7 @@ export function detectAndMask(
 		end: number;
 		type: string;
 		placeholder: string;
+		originalValue: string;
 	}> = [];
 
 	// If no entities specified, detect all
@@ -185,98 +266,81 @@ export function detectAndMask(
 	});
 
 	// Pattern for Russian names (Cyrillic characters, typically 2-3 words capitalized)
-	// This matches sequences of Cyrillic letters that are capitalized (common name pattern)
-	// Supports both capitalized and lowercase names (e.g., "Иван Иванов" or "иван иванов")
-	// Uses explicit boundaries instead of \b since \b doesn't work properly with Cyrillic characters
+	// CONSERVATIVE APPROACH: Only detect clear name patterns to avoid false positives
+	// Russian names are almost always capitalized, so we focus on that
 	if (entitiesToDetect.includes("RUSSIAN_NAME")) {
-		// Match multi-word capitalized Cyrillic sequences (2+ words for names)
-		const russianNamePatternCapitalizedMulti = regex(
-			"[А-ЯЁ][а-яё]+(?:\\s+[А-ЯЁ][а-яё]+)+(?=\\s|[\\?\\.,;:!]|$|')",
+		// Match EXACTLY 2 or 3 capitalized Cyrillic words (typical Russian name patterns)
+		// Examples: "Иван Иванов", "Иван Сергеевич Иванов"
+		// This is MUCH more conservative than matching any multi-word sequence
+		const russianNamePattern2Words = regex(
+			"[А-ЯЁ][а-яё]{2,}\\s+[А-ЯЁ][а-яё]{2,}(?=\\s|[\\?\\.,;:!]|$|')",
 			"g",
 		);
 
-		// Match single capitalized Cyrillic words (for names, but check whitelist)
-		const russianNamePatternCapitalizedSingle = regex(
-			"[А-ЯЁ][а-яё]+(?=\\s|[\\?\\.,;:!]|$|')",
-			"g",
-		);
-
-		// Match lowercase Cyrillic names (e.g., "иван иванов")
-		// Only match sequences of EXACTLY 2 words to reduce false positives
-		// Avoids matching verb phrases or longer sequences
-		const russianNamePatternLowercase = regex(
-			"[а-яё]{3,}\\s+[а-яё]{3,}(?=\\s|[\\?\\.,;:!]|$|')",
+		const russianNamePattern3Words = regex(
+			"[А-ЯЁ][а-яё]{2,}\\s+[А-ЯЁ][а-яё]{2,}\\s+[А-ЯЁ][а-яё]{2,}(?=\\s|[\\?\\.,;:!]|$|')",
 			"g",
 		);
 
 		const russianNames: string[] = [];
 		const maskedPositions: Array<{ start: number; end: number }> = [];
 
-		// Find multi-word capitalized names FIRST (higher priority, longer matches)
-		const multiWordMatches = [
-			...text.matchAll(russianNamePatternCapitalizedMulti),
-		];
-		for (const match of multiWordMatches) {
+		// Priority 1: Find 3-word names FIRST (to avoid splitting into 2-word matches)
+		const threeWordMatches = [...text.matchAll(russianNamePattern3Words)];
+		for (const match of threeWordMatches) {
 			const name = match[0];
 			const start = match.index ?? 0;
 			const end = start + name.length;
 
-			// Check if any word in the multi-word sequence is whitelisted
+			// Check if any word in the sequence is whitelisted
 			const words = name.split(/\s+/);
 			const hasWhitelistedWord = words.some((word) => isWhitelisted(word));
 
-			if (!hasWhitelistedWord) {
+			// Additional check: All words should be at least 3 characters (typical name length)
+			const allWordsValid = words.every((word) => word.length >= 3);
+
+			if (!hasWhitelistedWord && allWordsValid) {
 				russianNames.push(name);
 				maskedPositions.push({ start, end });
 			}
 		}
 
-		// Find single-word capitalized names (but check whitelist strictly)
-		const singleWordMatches = [
-			...text.matchAll(russianNamePatternCapitalizedSingle),
-		];
-		for (const match of singleWordMatches) {
+		// Priority 2: Find 2-word names (but check for overlaps with 3-word names)
+		const twoWordMatches = [...text.matchAll(russianNamePattern2Words)];
+		for (const match of twoWordMatches) {
 			const name = match[0];
 			const start = match.index ?? 0;
 			const end = start + name.length;
 
-			// Skip if this overlaps with already detected multi-word names
+			// Skip if this overlaps with already detected 3-word names
 			const overlaps = maskedPositions.some(
 				(pos) =>
 					(start >= pos.start && start < pos.end) ||
-					(end > pos.start && end <= pos.end),
+					(end > pos.start && end <= pos.end) ||
+					(start <= pos.start && end >= pos.end),
 			);
 
-			// Skip whitelisted words and overlaps
-			if (!overlaps && !isWhitelisted(name)) {
-				russianNames.push(name);
-				maskedPositions.push({ start, end });
+			if (overlaps) {
+				continue;
 			}
-		}
-
-		// Find lowercase names (only multi-word sequences)
-		const lowercaseMatches = [...text.matchAll(russianNamePatternLowercase)];
-		for (const match of lowercaseMatches) {
-			const name = match[0];
-			const start = match.index ?? 0;
-			const end = start + name.length;
 
 			// Check if any word is whitelisted
 			const words = name.split(/\s+/);
 			const hasWhitelistedWord = words.some((word) => isWhitelisted(word));
 
-			// Skip if overlaps or has whitelisted words
-			const overlaps = maskedPositions.some(
-				(pos) =>
-					(start >= pos.start && start < pos.end) ||
-					(end > pos.start && end <= pos.end),
-			);
+			// Additional check: Both words should be at least 3 characters
+			const allWordsValid = words.every((word) => word.length >= 3);
 
-			if (!overlaps && !hasWhitelistedWord && words.length >= 2) {
+			if (!hasWhitelistedWord && allWordsValid) {
 				russianNames.push(name);
 				maskedPositions.push({ start, end });
 			}
 		}
+
+		// NOTE: We intentionally DO NOT match:
+		// - Single capitalized words (too many false positives: "Служба", "Отель", etc.)
+		// - Lowercase names (extremely rare in Russian text, mostly causes false positives)
+		// - Sequences longer than 3 words (likely to be phrases, not names)
 
 		if (russianNames.length > 0) {
 			detected_entities.RUSSIAN_NAME = [...new Set(russianNames)]; // Remove duplicates
@@ -287,10 +351,12 @@ export function detectAndMask(
 
 			// Add all name positions to the global mask positions list
 			for (const pos of maskedPositions) {
+				const originalValue = text.substring(pos.start, pos.end);
 				allMaskPositions.push({
 					...pos,
 					type: "RUSSIAN_NAME",
 					placeholder: "<RUSSIAN_NAME>",
+					originalValue,
 				});
 			}
 		}
@@ -384,10 +450,12 @@ export function detectAndMask(
 
 			// Add all number positions to the global mask positions list
 			for (const pos of detectedPositions) {
+				const originalValue = text.substring(pos.start, pos.end);
 				allMaskPositions.push({
 					...pos,
 					type: "NUMBER",
 					placeholder: "<NUMBER>",
+					originalValue,
 				});
 			}
 		}
@@ -428,10 +496,12 @@ export function detectAndMask(
 
 			// Add all email positions to the global mask positions list
 			for (const pos of emailPositions) {
+				const originalValue = text.substring(pos.start, pos.end);
 				allMaskPositions.push({
 					...pos,
 					type: "EMAIL",
 					placeholder: "<EMAIL>",
+					originalValue,
 				});
 			}
 		}
@@ -444,9 +514,14 @@ export function detectAndMask(
 		const sortedPositions = allMaskPositions.sort((a, b) => b.start - a.start);
 
 		for (const pos of sortedPositions) {
+			// Use TokenVault to generate unique placeholders if provided
+			const placeholder = tokenVault
+				? tokenVault.store(pos.type as GuardrailEntityType, pos.originalValue)
+				: pos.placeholder;
+
 			maskedText =
 				maskedText.substring(0, pos.start) +
-				pos.placeholder +
+				placeholder +
 				maskedText.substring(pos.end);
 		}
 	}

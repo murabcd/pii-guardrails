@@ -6,7 +6,7 @@ import {
 	generateSystemPrompt,
 } from "@/lib/ai/guardrail-prompt-utils";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
-import { detectAndMask } from "@/lib/ai/guardrails";
+import { detectAndMask, TokenVault } from "@/lib/ai/guardrails";
 import { guardrailLogger } from "@/lib/ai/logger";
 import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
 import { rerankDocuments } from "@/lib/ai/reranker";
@@ -34,6 +34,18 @@ export async function POST(request: Request) {
 		entityTypes: guardrailEnabledEntities,
 		fileCount: selectedFilePathnames?.length ?? 0,
 	});
+
+	// Create TokenVault for storing PII mappings (needed for output unmasking)
+	const tokenVault =
+		guardrailEnabledEntities && guardrailEnabledEntities.length > 0
+			? new TokenVault()
+			: undefined;
+
+	if (tokenVault) {
+		guardrailLogger.info("API route: TokenVault created", {
+			hasGuardrails: true,
+		});
+	}
 
 	// Convert UIMessages to ModelMessages
 	const modelMessages = convertToModelMessages(messages);
@@ -119,6 +131,7 @@ export async function POST(request: Request) {
 					guardrailEnabledEntities as GuardrailEntityType[],
 					session.user?.email ?? undefined,
 					"user_message",
+					tokenVault,
 				);
 
 				maskedMessageText = maskedResult.checked_text;
@@ -160,6 +173,7 @@ export async function POST(request: Request) {
 									guardrailEnabledEntities as GuardrailEntityType[],
 									session.user?.email ?? undefined,
 									"rag_chunk",
+									tokenVault,
 								);
 
 								// Log if this chunk had guardrails masked
@@ -237,6 +251,7 @@ export async function POST(request: Request) {
 					middleware: createGuardrailMiddleware(
 						guardrailEnabledEntities as GuardrailEntityType[],
 						session.user?.email ?? undefined,
+						tokenVault,
 					),
 				})
 			: customModel;
@@ -272,7 +287,7 @@ export async function POST(request: Request) {
 		},
 	});
 
-	return result.toUIMessageStreamResponse({
+	const response = result.toUIMessageStreamResponse({
 		originalMessages: messages,
 		generateMessageId: () => crypto.randomUUID(),
 		onFinish: async ({ messages: allMessages }) => {
@@ -282,5 +297,177 @@ export async function POST(request: Request) {
 				author: session.user?.email ?? "",
 			});
 		},
+	});
+
+	// If no TokenVault, return response as-is (no unmasking needed)
+	if (!tokenVault || tokenVault.size() === 0) {
+		console.log(
+			`[API] No output unmasking: hasVault=${!!tokenVault}, size=${tokenVault?.size() ?? 0}`,
+		);
+		return response;
+	}
+
+	const placeholders = tokenVault.getPlaceholders();
+	console.log(
+		`[API] Starting output unmasking: vault size=${tokenVault.size()}, placeholders=${JSON.stringify(placeholders)}`,
+	);
+
+	// Create a TransformStream to unmask the LLM response chunks
+	// We need to buffer text because placeholders are streamed character-by-character
+	let lineBuffer = "";
+	let textBuffer = ""; // Accumulates delta text for progressive unmasking
+	let lastSentLength = 0; // Track how much unmasked text we've already sent
+
+	const { readable, writable } = new TransformStream({
+		transform(chunk, controller) {
+			try {
+				// Decode the chunk
+				const text = new TextDecoder().decode(chunk);
+
+				// Add to line buffer
+				lineBuffer += text;
+
+				// Try to extract complete SSE messages from buffer
+				const lines = lineBuffer.split("\n");
+
+				// Process all complete lines (keep last incomplete line in buffer)
+				for (let i = 0; i < lines.length - 1; i++) {
+					const line = lines[i];
+
+					// Skip empty lines
+					if (!line.trim()) {
+						controller.enqueue(new TextEncoder().encode("\n"));
+						continue;
+					}
+
+					// Parse SSE format: "data: {...}"
+					if (line.startsWith("data: ")) {
+						const dataContent = line.substring(6); // Remove "data: " prefix
+
+						// Special SSE messages that don't contain JSON
+						if (dataContent === "[DONE]") {
+							controller.enqueue(new TextEncoder().encode(line + "\n"));
+							continue;
+						}
+
+						try {
+							// Parse the JSON payload
+							const jsonData = JSON.parse(dataContent);
+
+							// Handle text delta - accumulate and progressively unmask
+							if (jsonData.delta && typeof jsonData.delta === "string") {
+								// Add new delta to buffer
+								textBuffer += jsonData.delta;
+
+								// Check if buffer ends with an incomplete placeholder pattern
+								// Pattern matches: <, <NUMBER, <NUMBER_, <NUMBER_1, etc. (but not <NUMBER_1> which is complete)
+								const incompleteMatch = textBuffer.match(/<[A-Z_]*\d*$/);
+								const hasIncompletePlaceholder = incompleteMatch !== null;
+
+								// Calculate how much of the buffer is safe to unmask and send
+								let safeTextBuffer = textBuffer;
+								let holdbackLength = 0;
+
+								if (hasIncompletePlaceholder) {
+									// Hold back the incomplete placeholder portion
+									holdbackLength = incompleteMatch[0].length;
+									safeTextBuffer = textBuffer.substring(
+										0,
+										textBuffer.length - holdbackLength,
+									);
+									console.log(
+										`[API] Holding back incomplete placeholder: "${incompleteMatch[0]}" (${holdbackLength} chars)`,
+									);
+								}
+
+								// Unmask only the safe portion (excluding incomplete placeholder)
+								const unmaskedBuffer = tokenVault.unmask(safeTextBuffer);
+
+								// Only send the NEW portion (what we haven't sent yet)
+								const newPortion = unmaskedBuffer.substring(lastSentLength);
+								lastSentLength = unmaskedBuffer.length;
+
+								// Update the delta with only the new unmasked text
+								jsonData.delta = newPortion;
+
+								if (newPortion.length > 0) {
+									console.log(
+										`[API] Unmasked new portion: "${newPortion.substring(0, 50)}" (total buffer: ${textBuffer.length} chars, safe: ${safeTextBuffer.length} chars, unmasked: ${unmaskedBuffer.length} chars, holdback: ${holdbackLength} chars)`,
+									);
+								}
+							} else if (jsonData.text && typeof jsonData.text === "string") {
+								// For complete messages, unmask directly
+								jsonData.text = tokenVault.unmask(jsonData.text);
+								console.log(
+									`[API] Unmasked complete text: "${jsonData.text.substring(0, 50)}"`,
+								);
+							}
+
+							// Re-encode the JSON and SSE format
+							const unmaskedLine = `data: ${JSON.stringify(jsonData)}`;
+							controller.enqueue(new TextEncoder().encode(unmaskedLine + "\n"));
+						} catch (parseError) {
+							// If JSON parsing fails, pass through original line
+							console.warn("[API] Failed to parse SSE JSON:", parseError);
+							controller.enqueue(new TextEncoder().encode(line + "\n"));
+						}
+					} else {
+						// Non-SSE line, pass through as-is
+						controller.enqueue(new TextEncoder().encode(line + "\n"));
+					}
+				}
+
+				// Keep the last incomplete line in buffer
+				lineBuffer = lines[lines.length - 1];
+			} catch (error) {
+				console.error("[API] Error unmasking chunk:", error);
+				// If unmasking fails, pass through original chunk
+				controller.enqueue(chunk);
+				lineBuffer = "";
+			}
+		},
+		flush(controller) {
+			// Process any remaining line buffer
+			if (lineBuffer.length > 0) {
+				if (lineBuffer.startsWith("data: ")) {
+					const dataContent = lineBuffer.substring(6);
+					if (dataContent === "[DONE]") {
+						controller.enqueue(new TextEncoder().encode(lineBuffer));
+					} else {
+						try {
+							const jsonData = JSON.parse(dataContent);
+							if (jsonData.delta && typeof jsonData.delta === "string") {
+								textBuffer += jsonData.delta;
+								const unmaskedBuffer = tokenVault.unmask(textBuffer);
+								const newPortion = unmaskedBuffer.substring(lastSentLength);
+								jsonData.delta = newPortion;
+							} else if (jsonData.text && typeof jsonData.text === "string") {
+								jsonData.text = tokenVault.unmask(jsonData.text);
+							}
+							const unmaskedBuffer = `data: ${JSON.stringify(jsonData)}`;
+							controller.enqueue(new TextEncoder().encode(unmaskedBuffer));
+						} catch {
+							controller.enqueue(new TextEncoder().encode(lineBuffer));
+						}
+					}
+				} else {
+					controller.enqueue(new TextEncoder().encode(lineBuffer));
+				}
+			}
+		},
+	});
+
+	// Pipe the response body through our transform stream
+	if (response.body) {
+		response.body.pipeTo(writable).catch((error) => {
+			guardrailLogger.error("Error piping response stream", { error });
+		});
+	}
+
+	// Return a new Response with the transformed body
+	return new Response(readable, {
+		headers: response.headers,
+		status: response.status,
+		statusText: response.statusText,
 	});
 }

@@ -31,6 +31,9 @@ export const GUARDRAIL_ENTITIES: Array<{
 // Re-export guardrail detection functions
 export { detectAndMask } from "./guardrail-detection";
 
+// Re-export TokenVault for output unmasking
+export { TokenVault } from "./token-vault";
+
 // Re-export guardrail settings storage functions
 export {
 	getDefaultGuardrailEntities,

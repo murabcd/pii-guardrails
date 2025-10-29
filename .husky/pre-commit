@@ -1,5 +1,5 @@
 echo "🔒 Running PII guardrail tests..."
-bun test lib/ai/__tests__/guardrail-detection.test.ts
+bun test lib/ai/__tests__/guardrail-detection.test.ts lib/ai/__tests__/token-vault.test.ts
 
 if [ $? -ne 0 ]; then
   echo "❌ PII guardrail tests failed! Commit aborted."

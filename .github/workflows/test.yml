@@ -24,7 +24,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run PII guardrail tests
-        run: bun test lib/ai/__tests__/guardrail-detection.test.ts
+        run: bun test lib/ai/__tests__/guardrail-detection.test.ts lib/ai/__tests__/token-vault.test.ts
 
       - name: Test summary
         if: always()
