@@ -38,6 +38,14 @@ const CYRILLIC_WHITELIST = new Set([
 	"Понедельник", "понедельник", "Вторник", "вторник",
 	"Среда", "среда", "Четверг", "четверг", "Пятница", "пятница",
 	"Суббота", "суббота", "Воскресенье", "воскресенье",
+	// Common prepositions and conjunctions (lowercase only to avoid over-filtering)
+	"на", "в", "с", "и", "а", "но", "или", "для", "по", "от", "до", "из",
+	"при", "про", "под", "над", "без", "через", "между", "перед", "за",
+	// Common verbs that might be detected
+	"был", "была", "было", "были", "есть", "было", "будет", "будут",
+	"позвонил", "написал", "встретил", "встретился", "сказал", "сделал",
+	// Common nouns
+	"это", "столица", "город", "страна", "год", "время", "человек", "дом",
 ]);
 
 /**
@@ -66,7 +74,9 @@ export function detectAndMask(
 		NUMBER?: string[];
 		EMAIL?: string[];
 	} = {};
-	let maskedText = text;
+
+	// Collect ALL entity positions before masking to avoid position shifting issues
+	const allMaskPositions: Array<{ start: number; end: number; type: string; placeholder: string }> = [];
 
 	// If no entities specified, detect all
 	const entitiesToDetect =
@@ -82,39 +92,85 @@ export function detectAndMask(
 	// Supports both capitalized and lowercase names (e.g., "Иван Иванов" or "иван иванов")
 	// Uses explicit boundaries instead of \b since \b doesn't work properly with Cyrillic characters
 	if (entitiesToDetect.includes("RUSSIAN_NAME")) {
-		// Match capitalized Cyrillic words (standard names)
-		const russianNamePatternCapitalized = regex(
-			"[А-ЯЁ][а-яё]+(?:\\s+[А-ЯЁ][а-яё]+)*(?=\\s|[\\?\\.,;:!]|$|')",
+		// Match multi-word capitalized Cyrillic sequences (2+ words for names)
+		const russianNamePatternCapitalizedMulti = regex(
+			"[А-ЯЁ][а-яё]+(?:\\s+[А-ЯЁ][а-яё]+)+(?=\\s|[\\?\\.,;:!]|$|')",
+			"g",
+		);
+
+		// Match single capitalized Cyrillic words (for names, but check whitelist)
+		const russianNamePatternCapitalizedSingle = regex(
+			"[А-ЯЁ][а-яё]+(?=\\s|[\\?\\.,;:!]|$|')",
 			"g",
 		);
 
 		// Match lowercase Cyrillic names (e.g., "иван иванов")
-		// Only match sequences of 2+ words to reduce false positives
+		// Only match sequences of EXACTLY 2 words to reduce false positives
+		// Avoids matching verb phrases or longer sequences
 		const russianNamePatternLowercase = regex(
-			"[а-яё]+(?:\\s+[а-яё]+)+(?=\\s|[\\?\\.,;:!]|$|')",
+			"[а-яё]{3,}\\s+[а-яё]{3,}(?=\\s|[\\?\\.,;:!]|$|')",
 			"g",
 		);
 
 		const russianNames: string[] = [];
+		const maskedPositions: Array<{ start: number; end: number }> = [];
 
-		// Find capitalized names
-		const capitalizedMatches = text.match(russianNamePatternCapitalized);
-		if (capitalizedMatches) {
-			// Filter out whitelisted words
-			const filteredCapitalized = capitalizedMatches.filter(
-				(name) => !isWhitelisted(name)
+		// Find multi-word capitalized names FIRST (higher priority, longer matches)
+		const multiWordMatches = [...text.matchAll(russianNamePatternCapitalizedMulti)];
+		for (const match of multiWordMatches) {
+			const name = match[0];
+			const start = match.index ?? 0;
+			const end = start + name.length;
+
+			// Check if any word in the multi-word sequence is whitelisted
+			const words = name.split(/\s+/);
+			const hasWhitelistedWord = words.some((word) => isWhitelisted(word));
+
+			if (!hasWhitelistedWord) {
+				russianNames.push(name);
+				maskedPositions.push({ start, end });
+			}
+		}
+
+		// Find single-word capitalized names (but check whitelist strictly)
+		const singleWordMatches = [...text.matchAll(russianNamePatternCapitalizedSingle)];
+		for (const match of singleWordMatches) {
+			const name = match[0];
+			const start = match.index ?? 0;
+			const end = start + name.length;
+
+			// Skip if this overlaps with already detected multi-word names
+			const overlaps = maskedPositions.some(
+				(pos) => (start >= pos.start && start < pos.end) || (end > pos.start && end <= pos.end)
 			);
-			russianNames.push(...filteredCapitalized);
+
+			// Skip whitelisted words and overlaps
+			if (!overlaps && !isWhitelisted(name)) {
+				russianNames.push(name);
+				maskedPositions.push({ start, end });
+			}
 		}
 
 		// Find lowercase names (only multi-word sequences)
-		const lowercaseMatches = text.match(russianNamePatternLowercase);
-		if (lowercaseMatches) {
-			// Filter out whitelisted and short sequences
-			const filteredLowercase = lowercaseMatches.filter(
-				(name) => !isWhitelisted(name) && name.split(/\s+/).length >= 2
+		const lowercaseMatches = [...text.matchAll(russianNamePatternLowercase)];
+		for (const match of lowercaseMatches) {
+			const name = match[0];
+			const start = match.index ?? 0;
+			const end = start + name.length;
+
+			// Check if any word is whitelisted
+			const words = name.split(/\s+/);
+			const hasWhitelistedWord = words.some((word) => isWhitelisted(word));
+
+			// Skip if overlaps or has whitelisted words
+			const overlaps = maskedPositions.some(
+				(pos) => (start >= pos.start && start < pos.end) || (end > pos.start && end <= pos.end)
 			);
-			russianNames.push(...filteredLowercase);
+
+			if (!overlaps && !hasWhitelistedWord && words.length >= 2) {
+				russianNames.push(name);
+				maskedPositions.push({ start, end });
+			}
 		}
 
 		if (russianNames.length > 0) {
@@ -124,13 +180,10 @@ export function detectAndMask(
 				entityCounts: { RUSSIAN_NAME: detected_entities.RUSSIAN_NAME.length },
 			});
 
-			// Mask Russian names (both patterns)
-			maskedText = maskedText.replace(russianNamePatternCapitalized, (match) => {
-				return isWhitelisted(match) ? match : "<RUSSIAN_NAME>";
-			});
-			maskedText = maskedText.replace(russianNamePatternLowercase, (match) => {
-				return isWhitelisted(match) ? match : "<RUSSIAN_NAME>";
-			});
+			// Add all name positions to the global mask positions list
+			for (const pos of maskedPositions) {
+				allMaskPositions.push({ ...pos, type: "RUSSIAN_NAME", placeholder: "<RUSSIAN_NAME>" });
+			}
 		}
 	}
 
@@ -146,19 +199,20 @@ export function detectAndMask(
 			"g",
 		);
 
-		// Pattern for unformatted long numbers (10+ digits)
+		// Pattern for unformatted long numbers (10+ digits, optionally starting with +7 or 8)
+		// This handles cases like +79001234567890 (longer than standard phone)
 		const longNumberPattern = regex("(?:\\+7|8)?\\d{10,}", "g");
 
-		// Pattern for medium number sequences (4-9 digits)
+		// Pattern for medium number sequences (7-9 digits)
 		// More conservative to avoid page numbers, building numbers, etc.
-		const mediumNumberPattern = regex("\\d{6,9}", "g");
+		const mediumNumberPattern = regex("\\d{7,9}", "g");
 
 		const numbers: string[] = [];
 		const detectedPositions: Array<{ start: number; end: number }> = [];
 
-		// Find formatted phone numbers first (highest priority)
-		const phoneMatches = [...text.matchAll(phonePattern)];
-		for (const match of phoneMatches) {
+		// Find long unformatted numbers FIRST (highest priority for longest matches)
+		const longMatches = [...text.matchAll(longNumberPattern)];
+		for (const match of longMatches) {
 			const num = match[0];
 			const start = match.index ?? 0;
 			const end = start + num.length;
@@ -166,16 +220,19 @@ export function detectAndMask(
 			detectedPositions.push({ start, end });
 		}
 
-		// Find long unformatted numbers
-		const longMatches = [...text.matchAll(longNumberPattern)];
-		for (const match of longMatches) {
+		// Find formatted phone numbers (check for overlaps with long numbers)
+		const phoneMatches = [...text.matchAll(phonePattern)];
+		for (const match of phoneMatches) {
 			const num = match[0];
 			const start = match.index ?? 0;
 			const end = start + num.length;
 
-			// Skip if this overlaps with already detected phone number
+			// Skip if this overlaps with already detected long number
 			const overlaps = detectedPositions.some(
-				(pos) => (start >= pos.start && start < pos.end) || (end > pos.start && end <= pos.end)
+				(pos) =>
+					(start >= pos.start && start < pos.end) ||
+					(end > pos.start && end <= pos.end) ||
+					(start <= pos.start && end >= pos.end)
 			);
 
 			if (!overlaps) {
@@ -193,7 +250,10 @@ export function detectAndMask(
 
 			// Skip if overlaps with already detected numbers
 			const overlaps = detectedPositions.some(
-				(pos) => (start >= pos.start && start < pos.end) || (end > pos.start && end <= pos.end)
+				(pos) =>
+					(start >= pos.start && start < pos.end) ||
+					(end > pos.start && end <= pos.end) ||
+					(start <= pos.start && end >= pos.end)
 			);
 
 			// Filter out years (1900-2099) and common non-PII patterns
@@ -213,10 +273,9 @@ export function detectAndMask(
 				entityCounts: { NUMBER: detected_entities.NUMBER.length },
 			});
 
-			// Mask numbers in order of longest first to avoid partial replacements
-			const sortedPositions = detectedPositions.sort((a, b) => b.start - a.start);
-			for (const pos of sortedPositions) {
-				maskedText = maskedText.substring(0, pos.start) + "<NUMBER>" + maskedText.substring(pos.end);
+			// Add all number positions to the global mask positions list
+			for (const pos of detectedPositions) {
+				allMaskPositions.push({ ...pos, type: "NUMBER", placeholder: "<NUMBER>" });
 			}
 		}
 	}
@@ -230,30 +289,45 @@ export function detectAndMask(
 		);
 
 		const emails: string[] = [];
-		const emailMatches = text.match(emailPattern);
-		if (emailMatches) {
-			// Filter out user's email if provided
-			const filteredEmails = emailMatches.filter(
-				(email) =>
-					!userEmail || email.toLowerCase() !== userEmail.toLowerCase(),
-			);
+		const emailPositions: Array<{ start: number; end: number }> = [];
 
-			if (filteredEmails.length > 0) {
-				emails.push(...filteredEmails);
-				detected_entities.EMAIL = [...new Set(emails)]; // Remove duplicates
+		const emailMatches = [...text.matchAll(emailPattern)];
+		for (const match of emailMatches) {
+			const email = match[0];
+			const start = match.index ?? 0;
+			const end = start + email.length;
 
-				guardrailLogger.info("Emails detected", {
-					entityCounts: { EMAIL: detected_entities.EMAIL.length },
-				});
-
-				// Mask only the emails that are not the user's email
-				maskedText = maskedText.replace(emailPattern, (match) => {
-					if (userEmail && match.toLowerCase() === userEmail.toLowerCase()) {
-						return match; // Don't mask user's email
-					}
-					return "<EMAIL>";
-				});
+			// Skip user's email if provided
+			if (userEmail && email.toLowerCase() === userEmail.toLowerCase()) {
+				continue;
 			}
+
+			emails.push(email);
+			emailPositions.push({ start, end });
+		}
+
+		if (emails.length > 0) {
+			detected_entities.EMAIL = [...new Set(emails)]; // Remove duplicates
+
+			guardrailLogger.info("Emails detected", {
+				entityCounts: { EMAIL: detected_entities.EMAIL.length },
+			});
+
+			// Add all email positions to the global mask positions list
+			for (const pos of emailPositions) {
+				allMaskPositions.push({ ...pos, type: "EMAIL", placeholder: "<EMAIL>" });
+			}
+		}
+	}
+
+	// Apply ALL masks in one pass (reverse order by position to preserve indices)
+	let maskedText = text;
+	if (allMaskPositions.length > 0) {
+		// Sort positions in reverse order (end to start) to avoid index shifting
+		const sortedPositions = allMaskPositions.sort((a, b) => b.start - a.start);
+
+		for (const pos of sortedPositions) {
+			maskedText = maskedText.substring(0, pos.start) + pos.placeholder + maskedText.substring(pos.end);
 		}
 	}
 

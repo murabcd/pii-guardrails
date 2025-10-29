@@ -1,0 +1,9 @@
+echo "🔒 Running PII guardrail tests..."
+bun test lib/ai/__tests__/guardrail-detection.test.ts
+
+if [ $? -ne 0 ]; then
+  echo "❌ PII guardrail tests failed! Commit aborted."
+  exit 1
+fi
+
+echo "✅ All PII guardrail tests passed!"

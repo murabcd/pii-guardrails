@@ -8,7 +8,6 @@ import { ArrowUp, Paperclip } from "lucide-react";
 import type { Session } from "next-auth";
 import { useEffect, useState, useRef } from "react";
 import { Files } from "@/components/files";
-import { GuardrailPreview } from "@/components/guardrail-preview";
 import { Message as PreviewMessage, ThinkingMessage } from "@/components/message";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 import { useSettings } from "@/components/settings-provider";
@@ -200,15 +199,6 @@ export function Chat({
 						))}
 					</div>
 					<div className="flex flex-col gap-3 w-full">
-					{/* Guardrail Preview */}
-					{input.trim() && enabledEntities.length > 0 && (
-						<GuardrailPreview
-							text={input}
-							enabledEntities={enabledEntities}
-							userEmail={session?.user?.email ?? undefined}
-						/>
-					)}
-
 					<form className="relative w-full" onSubmit={handleSubmit}>
 						<div className="relative">
 							<Textarea
@@ -296,15 +286,6 @@ export function Chat({
 				</div>
 			) : (
 				<div className="flex flex-col gap-3 w-full md:max-w-[500px] max-w-[calc(100dvw-32px)] px-4 md:px-0 mx-auto sticky bottom-0 pb-4 bg-background">
-					{/* Guardrail Preview */}
-					{input.trim() && enabledEntities.length > 0 && (
-						<GuardrailPreview
-							text={input}
-							enabledEntities={enabledEntities}
-							userEmail={session?.user?.email ?? undefined}
-						/>
-					)}
-
 					<form className="relative w-full" onSubmit={handleSubmit}>
 						<div className="relative">
 							<Textarea
