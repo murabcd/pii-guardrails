@@ -4,18 +4,16 @@ import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { motion } from "framer-motion";
-import { File } from "lucide-react";
+import { ArrowUp, Paperclip } from "lucide-react";
 import type { Session } from "next-auth";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Files } from "@/components/files";
+import { GuardrailPreview } from "@/components/guardrail-preview";
 import { Message as PreviewMessage } from "@/components/message";
-import { SettingsDialog } from "@/components/settings-dialog";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
-import type { GuardrailEntityType } from "@/lib/ai/guardrails";
-import {
-	loadGuardrailSettings,
-	saveGuardrailSettings,
-} from "@/lib/ai/guardrail-settings-storage";
+import { useSettings } from "@/components/settings-provider";
+import { Textarea } from "@/components/ui/textarea";
+import { SidebarToggle } from "@/components/sidebar-toggle";
 
 const suggestedActions = [
 	{
@@ -44,8 +42,7 @@ export function Chat({
 	>([]);
 	const [isFilesVisible, setIsFilesVisible] = useState(false);
 	const [isMounted, setIsMounted] = useState(false);
-	const [similarityThreshold, setSimilarityThreshold] = useState(1.0);
-	const [enabledEntities, setEnabledEntities] = useState<GuardrailEntityType[]>([]);
+	const { similarityThreshold, enabledEntities } = useSettings();
 
 	useEffect(() => {
 		if (isMounted !== false && session && session.user) {
@@ -53,21 +50,8 @@ export function Chat({
 				`${session.user.email}/selected-file-pathnames`,
 				JSON.stringify(selectedFilePathnames),
 			);
-			localStorage.setItem(
-				`${session.user.email}/similarity-threshold`,
-				similarityThreshold.toString(),
-			);
-			if (session.user.email) {
-				saveGuardrailSettings(enabledEntities, session.user.email);
-			}
 		}
-	}, [
-		selectedFilePathnames,
-		similarityThreshold,
-		enabledEntities,
-		isMounted,
-		session,
-	]);
+	}, [selectedFilePathnames, isMounted, session]);
 
 	useEffect(() => {
 		setIsMounted(true);
@@ -82,22 +66,13 @@ export function Chat({
 					) || "[]",
 				),
 			);
-			const savedThreshold = localStorage.getItem(
-				`${session.user.email}/similarity-threshold`,
-			);
-			if (savedThreshold) {
-				setSimilarityThreshold(parseFloat(savedThreshold));
-			}
-			if (session.user.email) {
-				const savedEntities = loadGuardrailSettings(session.user.email);
-				setEnabledEntities(savedEntities);
-			}
 		}
 	}, [session]);
 
 	const [input, setInput] = useState("");
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-	const { messages, sendMessage } = useChat({
+	const { messages, sendMessage, status, stop } = useChat({
 		id,
 		transport: new DefaultChatTransport({
 			api: "/api/chat",
@@ -112,9 +87,20 @@ export function Chat({
 	const [messagesContainerRef, messagesEndRef] =
 		useScrollToBottom<HTMLDivElement>();
 
+	const isLoading = status === "streaming" || status === "submitted";
+
+	useEffect(() => {
+		if (messages.length > 0 && messagesEndRef.current) {
+			messagesEndRef.current.scrollIntoView({
+				behavior: "smooth",
+				block: "end",
+			});
+		}
+	}, [messages.length, messagesEndRef]);
+
 	const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		if (input.trim() !== "") {
+		if (input.trim() !== "" && !isLoading) {
 			sendMessage(
 				{ text: input },
 				{
@@ -126,44 +112,58 @@ export function Chat({
 				},
 			);
 			setInput("");
+			// Trigger scroll after sending
+			setTimeout(() => {
+				if (messagesEndRef.current) {
+					messagesEndRef.current.scrollIntoView({
+						behavior: "smooth",
+						block: "end",
+					});
+				}
+			}, 100);
 		}
 	};
 
 	return (
-		<div className="flex flex-row justify-center pb-20 h-dvh bg-background">
-			<div className="flex flex-col justify-between items-center gap-4">
-				<div
-					ref={messagesContainerRef}
-					className="flex flex-col gap-4 h-full w-dvw items-center overflow-y-scroll"
-				>
-					{messages.map((message) => (
-						<PreviewMessage
-							key={
-								message.id ||
-								`${id}-${message.role}-${
-									message.parts
-										?.filter((part) => part.type === "text")
-										.map((part) => part.text)
-										.join("") || ""
-								}`
-							}
-							role={message.role}
-							content={
+		<div className="relative flex flex-col h-full bg-background">
+			<header className="sticky top-0 flex items-center gap-2 bg-background px-2 py-1.5 md:px-2 z-10">
+				<SidebarToggle />
+			</header>
+			<div
+				ref={messagesContainerRef}
+				className={`flex flex-col gap-4 flex-1 w-full items-center overflow-y-auto ${
+					messages.length === 0 ? "justify-center" : ""
+				}`}
+			>
+				{messages.map((message) => (
+					<PreviewMessage
+						key={
+							message.id ||
+							`${id}-${message.role}-${
 								message.parts
 									?.filter((part) => part.type === "text")
 									.map((part) => part.text)
 									.join("") || ""
-							}
-						/>
-					))}
-					<div
-						ref={messagesEndRef}
-						className="shrink-0 min-w-[24px] min-h-[24px]"
+							}`
+						}
+						role={message.role}
+						content={
+							message.parts
+								?.filter((part) => part.type === "text")
+								.map((part) => part.text)
+								.join("") || ""
+						}
 					/>
-				</div>
+				))}
+				<div
+					ref={messagesEndRef}
+					className="shrink-0 min-w-[24px] min-h-[24px]"
+				/>
+			</div>
 
-				{messages.length === 0 && (
-					<div className="grid sm:grid-cols-2 gap-2 w-full px-4 md:px-0 mx-auto md:max-w-[500px]">
+			{messages.length === 0 ? (
+				<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-4 w-full md:max-w-[500px] max-w-[calc(100dvw-32px)] px-4 md:px-0 mx-auto">
+					<div className="grid sm:grid-cols-2 gap-2 w-full">
 						{suggestedActions.map((suggestedAction, index) => (
 							<motion.div
 								initial={{ opacity: 0, y: 20 }}
@@ -196,47 +196,197 @@ export function Chat({
 							</motion.div>
 						))}
 					</div>
-				)}
+					<div className="flex flex-col gap-3 w-full">
+					{/* Guardrail Preview */}
+					{input.trim() && enabledEntities.length > 0 && (
+						<GuardrailPreview
+							text={input}
+							enabledEntities={enabledEntities}
+							userEmail={session?.user?.email ?? undefined}
+						/>
+					)}
 
-				<form
-					className="flex flex-row gap-2 relative items-center w-full md:max-w-[500px] max-w-[calc(100dvw-32px) px-4 md:px-0"
-					onSubmit={handleSubmit}
-				>
-					<input
-						className="bg-muted rounded-md px-2 py-1.5 flex-1 outline-none text-foreground"
-						placeholder="Send a message..."
-						value={input}
-						onChange={(event) => {
-							setInput(event.target.value);
-						}}
-					/>
+					<form className="relative w-full" onSubmit={handleSubmit}>
+						<div className="relative">
+							<Textarea
+								ref={textareaRef}
+								className="resize-none bg-secondary w-full rounded-2xl pl-12 pr-12 pt-4 pb-16"
+								value={input}
+								autoFocus
+								placeholder="Say something..."
+								onChange={(e) => {
+									setInput(e.target.value);
+								}}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && !e.shiftKey) {
+										e.preventDefault();
+										if (input.trim() && !isLoading) {
+											const form = e.currentTarget.closest("form");
+											if (form) {
+												form.requestSubmit();
+											}
+										}
+									}
+								}}
+							/>
+							<button
+								type="button"
+								className="absolute left-2 bottom-2 rounded-full p-2 bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								onClick={() => {
+									setIsFilesVisible(!isFilesVisible);
+								}}
+							>
+								<Paperclip size={16} className="text-current" />
+								{selectedFilePathnames?.length > 0 && (
+									<motion.div
+										className="absolute text-xs -top-2 -right-2 bg-primary size-5 rounded-full flex flex-row justify-center items-center border-2 border-background text-primary-foreground"
+										initial={{ opacity: 0, scale: 0.5 }}
+										animate={{ opacity: 1, scale: 1 }}
+										transition={{ delay: 0.5 }}
+									>
+										{selectedFilePathnames.length}
+									</motion.div>
+								)}
+							</button>
+							{isLoading ? (
+								<button
+									type="button"
+									onClick={stop}
+									className="cursor-pointer absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									<div className="animate-spin h-4 w-4">
+										<svg
+											className="h-4 w-4 text-current"
+											viewBox="0 0 24 24"
+											aria-label="Stop"
+										>
+											<title>Stop</title>
+											<circle
+												className="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												strokeWidth="4"
+												fill="none"
+											/>
+											<path
+												className="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+											/>
+										</svg>
+									</div>
+								</button>
+							) : (
+								<button
+									type="submit"
+									disabled={isLoading || !input.trim()}
+									className="absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									<ArrowUp className="h-4 w-4 text-current" />
+								</button>
+							)}
+						</div>
+					</form>
+					</div>
+				</div>
+			) : (
+				<div className="flex flex-col gap-3 w-full md:max-w-[500px] max-w-[calc(100dvw-32px)] px-4 md:px-0 mx-auto sticky bottom-0 pb-4 bg-background">
+					{/* Guardrail Preview */}
+					{input.trim() && enabledEntities.length > 0 && (
+						<GuardrailPreview
+							text={input}
+							enabledEntities={enabledEntities}
+							userEmail={session?.user?.email ?? undefined}
+						/>
+					)}
 
-					<button
-						type="button"
-						className="relative text-sm bg-muted rounded-lg size-9 shrink-0 flex flex-row items-center justify-center cursor-pointer hover:bg-accent"
-						onClick={() => {
-							setIsFilesVisible(!isFilesVisible);
-						}}
-					>
-						<File size={16} className="text-current" />
-						<motion.div
-							className="absolute text-xs -top-2 -right-2 bg-primary size-5 rounded-full flex flex-row justify-center items-center border-2 border-background text-primary-foreground"
-							initial={{ opacity: 0, scale: 0.5 }}
-							animate={{ opacity: 1, scale: 1 }}
-							transition={{ delay: 0.5 }}
-						>
-							{selectedFilePathnames?.length}
-						</motion.div>
-					</button>
-
-					<SettingsDialog
-						similarityThreshold={similarityThreshold}
-						onThresholdChange={setSimilarityThreshold}
-						enabledEntities={enabledEntities}
-						onEntitiesChange={setEnabledEntities}
-					/>
-				</form>
-			</div>
+					<form className="relative w-full" onSubmit={handleSubmit}>
+						<div className="relative">
+							<Textarea
+								ref={textareaRef}
+								className="resize-none bg-secondary w-full rounded-2xl pl-12 pr-12 pt-4 pb-16"
+								value={input}
+								autoFocus
+								placeholder="Say something..."
+								onChange={(e) => {
+									setInput(e.target.value);
+								}}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && !e.shiftKey) {
+										e.preventDefault();
+										if (input.trim() && !isLoading) {
+											const form = e.currentTarget.closest("form");
+											if (form) {
+												form.requestSubmit();
+											}
+										}
+									}
+								}}
+							/>
+							<button
+								type="button"
+								className="absolute left-2 bottom-2 rounded-full p-2 bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								onClick={() => {
+									setIsFilesVisible(!isFilesVisible);
+								}}
+							>
+								<Paperclip size={16} className="text-current" />
+								{selectedFilePathnames?.length > 0 && (
+									<motion.div
+										className="absolute text-xs -top-2 -right-2 bg-primary size-5 rounded-full flex flex-row justify-center items-center border-2 border-background text-primary-foreground"
+										initial={{ opacity: 0, scale: 0.5 }}
+										animate={{ opacity: 1, scale: 1 }}
+										transition={{ delay: 0.5 }}
+									>
+										{selectedFilePathnames.length}
+									</motion.div>
+								)}
+							</button>
+							{isLoading ? (
+								<button
+									type="button"
+									onClick={stop}
+									className="cursor-pointer absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									<div className="animate-spin h-4 w-4">
+										<svg
+											className="h-4 w-4 text-current"
+											viewBox="0 0 24 24"
+											aria-label="Stop"
+										>
+											<title>Stop</title>
+											<circle
+												className="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												strokeWidth="4"
+												fill="none"
+											/>
+											<path
+												className="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+											/>
+										</svg>
+									</div>
+								</button>
+							) : (
+								<button
+									type="submit"
+									disabled={isLoading || !input.trim()}
+									className="absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									<ArrowUp className="h-4 w-4 text-current" />
+								</button>
+							)}
+						</div>
+					</form>
+				</div>
+			)}
 
 			<Files
 				isOpen={isFilesVisible}

@@ -170,8 +170,18 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
+
+	html {
+		overflow-x: hidden;
+		height: 100%;
+	}
+
 	body {
 		@apply bg-background text-foreground;
+		overflow-x: hidden;
+		position: relative;
+		height: 100%;
+		margin: 0;
 	}
 
 	/* Touch interactions */

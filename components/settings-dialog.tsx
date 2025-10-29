@@ -46,6 +46,8 @@ interface SettingsDialogProps {
 	enabledEntities: GuardrailEntityType[];
 	onEntitiesChange: (entities: GuardrailEntityType[]) => void;
 	trigger?: React.ReactNode;
+	open?: boolean;
+	onOpenChange?: (open: boolean) => void;
 }
 
 export function SettingsDialog({
@@ -54,8 +56,12 @@ export function SettingsDialog({
 	enabledEntities,
 	onEntitiesChange,
 	trigger,
+	open: openProp,
+	onOpenChange: onOpenChangeProp,
 }: SettingsDialogProps) {
-	const [open, setOpen] = React.useState(false);
+	const [internalOpen, setInternalOpen] = React.useState(false);
+	const open = openProp ?? internalOpen;
+	const setOpen = onOpenChangeProp ?? setInternalOpen;
 	const [activeSection, setActiveSection] =
 		React.useState<SettingsSection>("rag");
 	const [localThreshold, setLocalThreshold] =
@@ -174,75 +180,70 @@ export function SettingsDialog({
 
 	const activeNavItem = settingsNav.find((item) => item.id === activeSection);
 
+	const dialogContent = (
+		<DialogContent className="overflow-hidden p-0 md:max-h-[600px] md:max-w-[700px] lg:max-w-[800px]">
+			<DialogTitle className="sr-only">Settings</DialogTitle>
+			<DialogDescription className="sr-only">
+				Customize your settings here.
+			</DialogDescription>
+			<SidebarProvider className="items-start">
+				<Sidebar collapsible="none" className="hidden md:flex">
+					<SidebarContent>
+						<SidebarGroup>
+							<SidebarGroupContent>
+								<SidebarMenu>
+									{settingsNav.map((item) => (
+										<SidebarMenuItem key={item.id}>
+											<SidebarMenuButton
+												isActive={activeSection === item.id}
+												onClick={() => setActiveSection(item.id)}
+											>
+												<item.icon />
+												<span>{item.name}</span>
+											</SidebarMenuButton>
+										</SidebarMenuItem>
+									))}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</SidebarContent>
+				</Sidebar>
+				<main className="flex h-[580px] flex-1 flex-col overflow-hidden">
+					<header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+						<div className="flex items-center gap-2 px-4">
+							<Breadcrumb>
+								<BreadcrumbList>
+									<BreadcrumbItem className="hidden md:block">
+										<BreadcrumbPage>Settings</BreadcrumbPage>
+									</BreadcrumbItem>
+									<BreadcrumbSeparator className="hidden md:block" />
+									<BreadcrumbItem>
+										<BreadcrumbPage>
+											{activeNavItem?.name || "Settings"}
+										</BreadcrumbPage>
+									</BreadcrumbItem>
+								</BreadcrumbList>
+							</Breadcrumb>
+						</div>
+					</header>
+					<div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0">
+						{renderContent()}
+					</div>
+					<div className="flex justify-end gap-2 p-4">
+						<Button variant="outline" onClick={handleCancel}>
+							Cancel
+						</Button>
+						<Button onClick={handleSave}>Save</Button>
+					</div>
+				</main>
+			</SidebarProvider>
+		</DialogContent>
+	);
+
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
-			<DialogTrigger asChild>
-				{trigger || (
-					<button
-						type="button"
-						className="text-sm bg-muted rounded-lg size-9 shrink-0 flex flex-row items-center justify-center cursor-pointer hover:bg-accent"
-					>
-						<Settings size={16} className="text-current" />
-					</button>
-				)}
-			</DialogTrigger>
-			<DialogContent className="overflow-hidden p-0 md:max-h-[600px] md:max-w-[700px] lg:max-w-[800px]">
-				<DialogTitle className="sr-only">Settings</DialogTitle>
-				<DialogDescription className="sr-only">
-					Customize your settings here.
-				</DialogDescription>
-				<SidebarProvider className="items-start">
-					<Sidebar collapsible="none" className="hidden md:flex">
-						<SidebarContent>
-							<SidebarGroup>
-								<SidebarGroupContent>
-									<SidebarMenu>
-										{settingsNav.map((item) => (
-											<SidebarMenuItem key={item.id}>
-												<SidebarMenuButton
-													isActive={activeSection === item.id}
-													onClick={() => setActiveSection(item.id)}
-												>
-													<item.icon />
-													<span>{item.name}</span>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
-										))}
-									</SidebarMenu>
-								</SidebarGroupContent>
-							</SidebarGroup>
-						</SidebarContent>
-					</Sidebar>
-					<main className="flex h-[580px] flex-1 flex-col overflow-hidden">
-						<header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-							<div className="flex items-center gap-2 px-4">
-								<Breadcrumb>
-									<BreadcrumbList>
-										<BreadcrumbItem className="hidden md:block">
-											<BreadcrumbPage>Settings</BreadcrumbPage>
-										</BreadcrumbItem>
-										<BreadcrumbSeparator className="hidden md:block" />
-										<BreadcrumbItem>
-											<BreadcrumbPage>
-												{activeNavItem?.name || "Settings"}
-											</BreadcrumbPage>
-										</BreadcrumbItem>
-									</BreadcrumbList>
-								</Breadcrumb>
-							</div>
-						</header>
-						<div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0">
-							{renderContent()}
-						</div>
-						<div className="flex justify-end gap-2 p-4">
-							<Button variant="outline" onClick={handleCancel}>
-								Cancel
-							</Button>
-							<Button onClick={handleSave}>Save</Button>
-						</div>
-					</main>
-				</SidebarProvider>
-			</DialogContent>
+			{trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
+			{dialogContent}
 		</Dialog>
 	);
 }

@@ -4,8 +4,8 @@ import { createMessage, findSimilarChunksByFilePaths } from "@/app/db";
 import { customModel } from "@/lib/ai";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 import { detectAndMask } from "@/lib/ai/guardrails";
-import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
 import { guardrailLogger } from "@/lib/ai/logger";
+import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
 
 export async function POST(request: Request) {
 	const {
@@ -23,7 +23,9 @@ export async function POST(request: Request) {
 	}
 
 	guardrailLogger.info("API route: Request received", {
-		hasGuardrails: !!(guardrailEnabledEntities && guardrailEnabledEntities.length > 0),
+		hasGuardrails: !!(
+			guardrailEnabledEntities && guardrailEnabledEntities.length > 0
+		),
 		entityTypes: guardrailEnabledEntities,
 		fileCount: selectedFilePathnames?.length ?? 0,
 	});
@@ -140,9 +142,13 @@ export async function POST(request: Request) {
 										`API route: Masked RAG chunk ${idx + 1}/${similarChunks.length}`,
 										{
 											detected: true,
-											entityTypes: Object.keys(maskedResult.detected_entities).filter(
+											entityTypes: Object.keys(
+												maskedResult.detected_entities,
+											).filter(
 												(key) =>
-													(maskedResult.detected_entities[key as GuardrailEntityType]?.length ?? 0) > 0,
+													(maskedResult.detected_entities[
+														key as GuardrailEntityType
+													]?.length ?? 0) > 0,
 											),
 											textLength: chunk.content.length,
 											maskedLength: maskedResult.checked_text.length,

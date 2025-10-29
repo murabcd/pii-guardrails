@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
-import { Navbar } from "@/components/navbar";
 import "./globals.css";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const geistSans = Geist({
@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
 	metadataBase: new URL("https://pii-rag.vercel.app"),
-	title: "PII RAG",
+	title: "RAG",
 	description: "Masked PII RAG using Next.js and AI SDK",
 	icons: {
 		icon: "/logo.svg",
@@ -40,9 +40,10 @@ export default function RootLayout({
 					enableSystem
 					disableTransitionOnChange
 				>
-					<Toaster position="top-center" />
-					<Navbar />
-					{children}
+					<SessionProvider>
+						<Toaster position="top-center" />
+						{children}
+					</SessionProvider>
 				</ThemeProvider>
 			</body>
 		</html>

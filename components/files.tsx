@@ -46,7 +46,7 @@ export const Files = ({
 			<DialogContent className="sm:max-w-[425px]">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
-						Manage Knowledge Base
+						Upload files
 					</DialogTitle>
 				</DialogHeader>
 
