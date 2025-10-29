@@ -9,7 +9,7 @@ import type { Session } from "next-auth";
 import { useEffect, useState, useRef } from "react";
 import { Files } from "@/components/files";
 import { GuardrailPreview } from "@/components/guardrail-preview";
-import { Message as PreviewMessage } from "@/components/message";
+import { Message as PreviewMessage, ThinkingMessage } from "@/components/message";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 import { useSettings } from "@/components/settings-provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,11 +131,12 @@ export function Chat({
 			</header>
 			<div
 				ref={messagesContainerRef}
-				className={`flex flex-col gap-4 flex-1 w-full items-center overflow-y-auto ${
-					messages.length === 0 ? "justify-center" : ""
+				className={`flex flex-col gap-4 flex-1 w-full overflow-y-auto py-8 ${
+					messages.length === 0 ? "justify-center items-center" : ""
 				}`}
 			>
-				{messages.map((message) => (
+				<div className="pt-8 mx-auto max-w-2xl w-full">
+					{messages.map((message) => (
 					<PreviewMessage
 						key={
 							message.id ||
@@ -154,11 +155,13 @@ export function Chat({
 								.join("") || ""
 						}
 					/>
-				))}
-				<div
-					ref={messagesEndRef}
-					className="shrink-0 min-w-[24px] min-h-[24px]"
-				/>
+					))}
+					{status === "submitted" && <ThinkingMessage key="thinking" />}
+					<div
+						ref={messagesEndRef}
+						className="shrink-0 min-w-[24px] min-h-[24px]"
+					/>
+				</div>
 			</div>
 
 			{messages.length === 0 ? (

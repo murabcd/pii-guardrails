@@ -125,7 +125,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete all chats?</AlertDialogTitle>
+						<AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
 						<AlertDialogDescription>
 							This action cannot be undone. This will permanently delete all
 							your chats and remove them from our servers.
@@ -134,7 +134,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction onClick={handleDeleteAll}>
-							Delete all
+							Continue
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
