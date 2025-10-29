@@ -1,8 +1,8 @@
-import { embed, embedMany } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { embed, embedMany } from "ai";
+import { and, desc, inArray, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import { chunk } from "@/lib/db/schema";
-import { sql, inArray, desc, and } from "drizzle-orm";
 
 const embeddingModel = openai.embedding("text-embedding-3-small");
 
@@ -45,17 +45,7 @@ export async function findSimilarChunks(
 	const queryVectorStr = `[${queryEmbedding.join(",")}]`;
 	const similarity = sql<number>`1 - (${chunk.embedding} <=> ${queryVectorStr}::vector)`;
 
-	// First, let's check if there are any chunks for these file paths
-	const allChunks = await db
-		.select({
-			id: chunk.id,
-			filePath: chunk.filePath,
-			content: chunk.content,
-		})
-		.from(chunk)
-		.where(inArray(chunk.filePath, filePaths));
-
-	// Now do the similarity search with the user-defined threshold
+	// Do the similarity search with the user-defined threshold
 	const results = await db
 		.select({
 			id: chunk.id,

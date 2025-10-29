@@ -1,6 +1,7 @@
 "use client";
 
 import cx from "classnames";
+import { CheckSquare, Info, Loader2, Square, Trash2 } from "lucide-react";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { fetcher } from "@/utils/functions";
-import { CheckSquare, Info, Loader2, Square, Trash2 } from "lucide-react";
 
 export const Files = ({
 	selectedFilePathnames,
@@ -37,7 +37,7 @@ export const Files = ({
 			pathname: string;
 			url: string;
 		}>
-	>("api/files/list", fetcher, {
+	>("/api/files/list", fetcher, {
 		fallbackData: [],
 	});
 

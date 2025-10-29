@@ -22,4 +22,3 @@ export async function DELETE(request: Request) {
 		return Response.json("Internal server error", { status: 500 });
 	}
 }
-

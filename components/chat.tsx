@@ -4,13 +4,18 @@ import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { motion } from "framer-motion";
+import { File } from "lucide-react";
 import type { Session } from "next-auth";
 import { useEffect, useState } from "react";
 import { Files } from "@/components/files";
-import { File } from "lucide-react";
 import { Message as PreviewMessage } from "@/components/message";
-import { SettingsModal } from "@/components/settings";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
+import type { GuardrailEntityType } from "@/lib/ai/guardrails";
+import {
+	loadGuardrailSettings,
+	saveGuardrailSettings,
+} from "@/lib/ai/guardrail-settings-storage";
 
 const suggestedActions = [
 	{
@@ -40,6 +45,7 @@ export function Chat({
 	const [isFilesVisible, setIsFilesVisible] = useState(false);
 	const [isMounted, setIsMounted] = useState(false);
 	const [similarityThreshold, setSimilarityThreshold] = useState(1.0);
+	const [enabledEntities, setEnabledEntities] = useState<GuardrailEntityType[]>([]);
 
 	useEffect(() => {
 		if (isMounted !== false && session && session.user) {
@@ -51,8 +57,17 @@ export function Chat({
 				`${session.user.email}/similarity-threshold`,
 				similarityThreshold.toString(),
 			);
+			if (session.user.email) {
+				saveGuardrailSettings(enabledEntities, session.user.email);
+			}
 		}
-	}, [selectedFilePathnames, similarityThreshold, isMounted, session]);
+	}, [
+		selectedFilePathnames,
+		similarityThreshold,
+		enabledEntities,
+		isMounted,
+		session,
+	]);
 
 	useEffect(() => {
 		setIsMounted(true);
@@ -72,6 +87,10 @@ export function Chat({
 			);
 			if (savedThreshold) {
 				setSimilarityThreshold(parseFloat(savedThreshold));
+			}
+			if (session.user.email) {
+				const savedEntities = loadGuardrailSettings(session.user.email);
+				setEnabledEntities(savedEntities);
 			}
 		}
 	}, [session]);
@@ -102,6 +121,7 @@ export function Chat({
 					body: {
 						selectedFilePathnames,
 						similarityThreshold,
+						guardrailEnabledEntities: enabledEntities,
 					},
 				},
 			);
@@ -116,9 +136,17 @@ export function Chat({
 					ref={messagesContainerRef}
 					className="flex flex-col gap-4 h-full w-dvw items-center overflow-y-scroll"
 				>
-					{messages.map((message, index) => (
+					{messages.map((message) => (
 						<PreviewMessage
-							key={`${id}-${index}`}
+							key={
+								message.id ||
+								`${id}-${message.role}-${
+									message.parts
+										?.filter((part) => part.type === "text")
+										.map((part) => part.text)
+										.join("") || ""
+								}`
+							}
 							role={message.role}
 							content={
 								message.parts
@@ -141,7 +169,7 @@ export function Chat({
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
 								transition={{ delay: 0.05 * index }}
-								key={index}
+								key={suggestedAction.action}
 								className={index > 1 ? "hidden sm:block" : "block"}
 							>
 								<button
@@ -153,6 +181,7 @@ export function Chat({
 												body: {
 													selectedFilePathnames,
 													similarityThreshold,
+													guardrailEnabledEntities: enabledEntities,
 												},
 											},
 										);
@@ -200,9 +229,11 @@ export function Chat({
 						</motion.div>
 					</button>
 
-					<SettingsModal
+					<SettingsDialog
 						similarityThreshold={similarityThreshold}
 						onThresholdChange={setSimilarityThreshold}
+						enabledEntities={enabledEntities}
+						onEntitiesChange={setEnabledEntities}
 					/>
 				</form>
 			</div>

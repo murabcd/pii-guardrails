@@ -1,4 +1,3 @@
-import { AIDevtools } from "@ai-sdk-tools/devtools";
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import { Navbar } from "@/components/navbar";
@@ -44,7 +43,6 @@ export default function RootLayout({
 					<Toaster position="top-center" />
 					<Navbar />
 					{children}
-					{process.env.NODE_ENV === "development" && <AIDevtools />}
 				</ThemeProvider>
 			</body>
 		</html>

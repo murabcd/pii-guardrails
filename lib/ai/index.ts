@@ -1,3 +1,10 @@
 import { openai } from "@ai-sdk/openai";
+import { wrapLanguageModel } from "ai";
+import { guardrailMiddleware } from "./middleware/guardrail";
 
-export const customModel = openai("gpt-4o");
+const baseModel = openai("gpt-4o");
+
+export const customModel = wrapLanguageModel({
+	model: baseModel,
+	middleware: guardrailMiddleware,
+});

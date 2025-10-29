@@ -1,17 +1,18 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import cx from "classnames";
+import { AnimatePresence, motion } from "framer-motion";
 import { Info, Menu, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import Link from "next/link";
-import cx from "classnames";
-import { useParams } from "next/navigation";
 import type { Chat } from "@/lib/db/schema";
 import { fetcher } from "@/utils/functions";
 
 export const History = () => {
 	const { id } = useParams();
+	const router = useRouter();
 
 	const [isHistoryVisible, setIsHistoryVisible] = useState(false);
 	const {
@@ -91,15 +92,17 @@ export const History = () => {
 									</div>
 								</div>
 
-								<Link
-									href="/"
+								<button
+									type="button"
 									className="text-muted-foreground bg-muted hover:bg-accent p-1.5 rounded-md cursor-pointer"
 									onClick={() => {
 										setIsHistoryVisible(false);
+										router.push("/");
+										router.refresh();
 									}}
 								>
 									<Plus size={14} className="text-current" />
-								</Link>
+								</button>
 							</div>
 
 							<div className="flex flex-col overflow-y-scroll">
