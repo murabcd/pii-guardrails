@@ -6,6 +6,7 @@ import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 import { detectAndMask } from "@/lib/ai/guardrails";
 import { guardrailLogger } from "@/lib/ai/logger";
 import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
+import { generateContextInstruction, generateSystemPrompt } from "@/lib/ai/guardrail-prompt-utils";
 
 export async function POST(request: Request) {
 	const {
@@ -176,9 +177,11 @@ export async function POST(request: Request) {
 					),
 				});
 
-				const contextInstruction = hasMaskedGuardrails
-					? "\n---\nIMPORTANT: The user's question may contain masked placeholders like <NUMBER>, <EMAIL>, or <RUSSIAN_NAME>. These placeholders represent real values that were used to retrieve this context. When the user asks about these masked entities, match them with the corresponding actual values found in the context above. Use the context above to answer the user's question accurately. Base your answer primarily on this context. If the information needed to answer the question is not in the context, say so clearly."
-					: "\n---\nUse the context above to answer the user's question. Base your answer primarily on this context. If the information needed to answer the question is not in the context, say so clearly.";
+				// Generate context instruction with dynamic placeholders
+				const contextInstruction = generateContextInstruction(
+					hasMaskedGuardrails,
+					guardrailEnabledEntities as GuardrailEntityType[],
+				);
 
 				const contextText = [
 					"## Context from uploaded documents:",
@@ -223,9 +226,11 @@ export async function POST(request: Request) {
 	// Build system prompt with guardrail-aware instructions
 	const hasGuardrailsEnabled =
 		guardrailEnabledEntities && guardrailEnabledEntities.length > 0;
-	const systemPrompt = hasGuardrailsEnabled
-		? "You are a helpful assistant that answers questions based on the provided document context. IMPORTANT: When the user's question contains masked placeholders like <NUMBER>, <EMAIL>, or <RUSSIAN_NAME>, these represent real values that were used to retrieve the context. Match these placeholders with corresponding actual values in the context to answer the question. When context is available, prioritize it in your responses. Keep your responses concise, accurate, and grounded in the provided information."
-		: "You are a helpful assistant that answers questions based on the provided document context. When the context is available, prioritize it in your responses. Keep your responses concise, accurate, and grounded in the provided information.";
+
+	const systemPrompt = generateSystemPrompt(
+		hasGuardrailsEnabled,
+		guardrailEnabledEntities as GuardrailEntityType[],
+	);
 
 	guardrailLogger.info("API route: System prompt configured", {
 		hasGuardrailInstructions: hasGuardrailsEnabled,
