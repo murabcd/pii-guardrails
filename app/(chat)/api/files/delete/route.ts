@@ -1,6 +1,6 @@
 import { del, head } from "@vercel/blob";
 import { auth } from "@/app/(auth)/auth";
-import { deleteChunksByFilePath } from "@/app/db";
+import { deleteChunksByFilePath } from "@/lib/db/db";
 
 export async function DELETE(request: Request) {
 	const { searchParams } = new URL(request.url);

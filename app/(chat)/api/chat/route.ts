@@ -1,6 +1,6 @@
 import { convertToModelMessages, streamText, wrapLanguageModel } from "ai";
 import { auth } from "@/app/(auth)/auth";
-import { createMessage, findSimilarChunksByFilePaths } from "@/app/db";
+import { createMessage, findSimilarChunksByFilePaths } from "@/lib/db/db";
 import { customModel } from "@/lib/ai";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 import { detectAndMask } from "@/lib/ai/guardrails";

@@ -3,7 +3,7 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { put } from "@vercel/blob";
 import { embedMany } from "ai";
 import { auth } from "@/app/(auth)/auth";
-import { insertChunks } from "@/app/db";
+import { insertChunks } from "@/lib/db/db";
 import { getPdfContentFromUrl } from "@/utils/pdf";
 
 export async function POST(request: Request) {

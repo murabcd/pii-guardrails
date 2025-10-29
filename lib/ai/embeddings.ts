@@ -1,7 +1,7 @@
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
 import { and, desc, inArray, sql } from "drizzle-orm";
-import { db } from "@/app/db";
+import { db } from "@/lib/db/db";
 import { chunk } from "@/lib/db/schema";
 
 const embeddingModel = openai.embedding("text-embedding-3-small");

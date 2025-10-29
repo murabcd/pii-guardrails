@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { auth } from "@/app/(auth)/auth";
-import { db, getChatsByUser } from "@/app/db";
+import { db, getChatsByUser } from "@/lib/db/db";
 import { chat } from "@/lib/db/schema";
 
 export async function GET() {

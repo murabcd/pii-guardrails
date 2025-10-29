@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { deleteChat } from "@/app/db";
+import { deleteChat } from "@/lib/db/db";
 
 export async function DELETE(request: Request) {
 	const session = await auth();

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
-import { getChatById } from "@/app/db";
+import { getChatById } from "@/lib/db/db";
 import { Chat as PreviewChat } from "@/components/chat";
 import type { Chat } from "@/lib/db/schema";
 
