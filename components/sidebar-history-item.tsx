@@ -1,7 +1,7 @@
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { memo } from "react";
 import type { Chat } from "@/lib/db/schema";
-import { MoreHorizontal, Trash2 } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -27,10 +27,10 @@ const PureChatItem = ({
 }) => {
 	const chatTitle =
 		chat.messages[0]?.parts
-			?.filter((part: { type?: string }) => part.type === "text")
-			.map((part: { text?: string }) => part.text)
+			?.filter((part: any) => part.type === "text")
+			.map((part: any) => part.text)
 			.join(" ") ||
-		(chat.messages[0] as { content?: string })?.content ||
+		(chat.messages[0] as any)?.content ||
 		"Untitled Chat";
 
 	return (
@@ -72,4 +72,3 @@ export const ChatItem = memo(PureChatItem, (prevProps, nextProps) => {
 	}
 	return true;
 });
-

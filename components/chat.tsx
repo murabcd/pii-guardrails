@@ -6,13 +6,16 @@ import { DefaultChatTransport } from "ai";
 import { motion } from "framer-motion";
 import { ArrowUp, Paperclip } from "lucide-react";
 import type { Session } from "next-auth";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Files } from "@/components/files";
-import { Message as PreviewMessage, ThinkingMessage } from "@/components/message";
-import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
+import {
+	Message as PreviewMessage,
+	ThinkingMessage,
+} from "@/components/message";
 import { useSettings } from "@/components/settings-provider";
-import { Textarea } from "@/components/ui/textarea";
 import { SidebarToggle } from "@/components/sidebar-toggle";
+import { Textarea } from "@/components/ui/textarea";
+import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 
 const suggestedActions = [
 	{
@@ -136,24 +139,24 @@ export function Chat({
 			>
 				<div className="pt-8 mx-auto max-w-2xl w-full">
 					{messages.map((message) => (
-					<PreviewMessage
-						key={
-							message.id ||
-							`${id}-${message.role}-${
+						<PreviewMessage
+							key={
+								message.id ||
+								`${id}-${message.role}-${
+									message.parts
+										?.filter((part) => part.type === "text")
+										.map((part) => part.text)
+										.join("") || ""
+								}`
+							}
+							role={message.role}
+							content={
 								message.parts
 									?.filter((part) => part.type === "text")
 									.map((part) => part.text)
 									.join("") || ""
-							}`
-						}
-						role={message.role}
-						content={
-							message.parts
-								?.filter((part) => part.type === "text")
-								.map((part) => part.text)
-								.join("") || ""
-						}
-					/>
+							}
+						/>
 					))}
 					{status === "submitted" && <ThinkingMessage key="thinking" />}
 					<div
@@ -199,89 +202,89 @@ export function Chat({
 						))}
 					</div>
 					<div className="flex flex-col gap-3 w-full">
-					<form className="relative w-full" onSubmit={handleSubmit}>
-						<div className="relative">
-							<Textarea
-								ref={textareaRef}
-								className="resize-none bg-secondary w-full rounded-2xl pl-12 pr-12 pt-4 pb-16"
-								value={input}
-								autoFocus
-								placeholder="Say something..."
-								onChange={(e) => {
-									setInput(e.target.value);
-								}}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" && !e.shiftKey) {
-										e.preventDefault();
-										if (input.trim() && !isLoading) {
-											const form = e.currentTarget.closest("form");
-											if (form) {
-												form.requestSubmit();
+						<form className="relative w-full" onSubmit={handleSubmit}>
+							<div className="relative">
+								<Textarea
+									ref={textareaRef}
+									className="resize-none bg-secondary w-full rounded-2xl pl-12 pr-12 pt-4 pb-16"
+									value={input}
+									autoFocus
+									placeholder="Say something..."
+									onChange={(e) => {
+										setInput(e.target.value);
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !e.shiftKey) {
+											e.preventDefault();
+											if (input.trim() && !isLoading) {
+												const form = e.currentTarget.closest("form");
+												if (form) {
+													form.requestSubmit();
+												}
 											}
 										}
-									}
-								}}
-							/>
-							<button
-								type="button"
-								className="absolute left-2 bottom-2 rounded-full p-2 bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-								onClick={() => {
-									setIsFilesVisible(!isFilesVisible);
-								}}
-							>
-								<Paperclip size={16} className="text-current" />
-								{selectedFilePathnames?.length > 0 && (
-									<motion.div
-										className="absolute text-xs -top-2 -right-2 bg-primary size-5 rounded-full flex flex-row justify-center items-center border-2 border-background text-primary-foreground"
-										initial={{ opacity: 0, scale: 0.5 }}
-										animate={{ opacity: 1, scale: 1 }}
-										transition={{ delay: 0.5 }}
-									>
-										{selectedFilePathnames.length}
-									</motion.div>
-								)}
-							</button>
-							{isLoading ? (
+									}}
+								/>
 								<button
 									type="button"
-									onClick={stop}
-									className="cursor-pointer absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+									className="absolute left-2 bottom-2 rounded-full p-2 bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+									onClick={() => {
+										setIsFilesVisible(!isFilesVisible);
+									}}
 								>
-									<div className="animate-spin h-4 w-4">
-										<svg
-											className="h-4 w-4 text-current"
-											viewBox="0 0 24 24"
-											aria-label="Stop"
+									<Paperclip size={16} className="text-current" />
+									{selectedFilePathnames?.length > 0 && (
+										<motion.div
+											className="absolute text-xs -top-2 -right-2 bg-primary size-5 rounded-full flex flex-row justify-center items-center border-2 border-background text-primary-foreground"
+											initial={{ opacity: 0, scale: 0.5 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.5 }}
 										>
-											<title>Stop</title>
-											<circle
-												className="opacity-25"
-												cx="12"
-												cy="12"
-												r="10"
-												stroke="currentColor"
-												strokeWidth="4"
-												fill="none"
-											/>
-											<path
-												className="opacity-75"
-												fill="currentColor"
-												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-											/>
-										</svg>
-									</div>
+											{selectedFilePathnames.length}
+										</motion.div>
+									)}
 								</button>
-							) : (
-								<button
-									type="submit"
-									disabled={isLoading || !input.trim()}
-									className="absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-								>
-									<ArrowUp className="h-4 w-4 text-current" />
-								</button>
-							)}
-						</div>
-					</form>
+								{isLoading ? (
+									<button
+										type="button"
+										onClick={stop}
+										className="cursor-pointer absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+									>
+										<div className="animate-spin h-4 w-4">
+											<svg
+												className="h-4 w-4 text-current"
+												viewBox="0 0 24 24"
+												aria-label="Stop"
+											>
+												<title>Stop</title>
+												<circle
+													className="opacity-25"
+													cx="12"
+													cy="12"
+													r="10"
+													stroke="currentColor"
+													strokeWidth="4"
+													fill="none"
+												/>
+												<path
+													className="opacity-75"
+													fill="currentColor"
+													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+												/>
+											</svg>
+										</div>
+									</button>
+								) : (
+									<button
+										type="submit"
+										disabled={isLoading || !input.trim()}
+										className="absolute right-2 bottom-2 rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+									>
+										<ArrowUp className="h-4 w-4 text-current" />
+									</button>
+								)}
+							</div>
+						</form>
 					</div>
 				</div>
 			) : (

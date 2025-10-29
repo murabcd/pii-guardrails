@@ -112,7 +112,7 @@ class GuardrailTelemetry {
 					: 0,
 			lastDetectionTime:
 				this.events.length > 0
-					? this.events[this.events.length - 1]?.timestamp ?? null
+					? (this.events[this.events.length - 1]?.timestamp ?? null)
 					: null,
 		};
 	}

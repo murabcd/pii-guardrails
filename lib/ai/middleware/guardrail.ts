@@ -56,9 +56,8 @@ export function createGuardrailMiddleware(
 								if (part.type === "text") {
 									// Skip guardrail detection if text is already masked (idempotency)
 									// This optimizes performance when transformParams is called multiple times
-									const isAlreadyMasked = /<(?:NUMBER|EMAIL|RUSSIAN_NAME)>/.test(
-										part.text,
-									);
+									const isAlreadyMasked =
+										/<(?:NUMBER|EMAIL|RUSSIAN_NAME)>/.test(part.text);
 									if (isAlreadyMasked) {
 										guardrailLogger.debug("Text already masked, skipping", {
 											textLength: part.text.length,
@@ -116,4 +115,3 @@ export function createGuardrailMiddleware(
 
 // Default middleware with all entities enabled
 export const guardrailMiddleware = createGuardrailMiddleware();
-

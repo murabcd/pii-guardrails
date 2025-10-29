@@ -13,12 +13,16 @@ export function getDefaultGuardrailEntities(): GuardrailEntityType[] {
  * Load guardrail settings from localStorage
  * @param userEmail - Optional user email for per-user settings
  */
-export function loadGuardrailSettings(userEmail?: string): GuardrailEntityType[] {
+export function loadGuardrailSettings(
+	userEmail?: string,
+): GuardrailEntityType[] {
 	if (typeof window === "undefined") {
 		return getDefaultGuardrailEntities();
 	}
 
-	const key = userEmail ? `${GUARDRAIL_SETTINGS_KEY}-${userEmail}` : GUARDRAIL_SETTINGS_KEY;
+	const key = userEmail
+		? `${GUARDRAIL_SETTINGS_KEY}-${userEmail}`
+		: GUARDRAIL_SETTINGS_KEY;
 
 	try {
 		const stored = localStorage.getItem(key);
@@ -55,7 +59,9 @@ export function saveGuardrailSettings(
 		return;
 	}
 
-	const key = userEmail ? `${GUARDRAIL_SETTINGS_KEY}-${userEmail}` : GUARDRAIL_SETTINGS_KEY;
+	const key = userEmail
+		? `${GUARDRAIL_SETTINGS_KEY}-${userEmail}`
+		: GUARDRAIL_SETTINGS_KEY;
 
 	try {
 		localStorage.setItem(key, JSON.stringify(entities));
@@ -63,4 +69,3 @@ export function saveGuardrailSettings(
 		// If storage fails, silently fail
 	}
 }
-

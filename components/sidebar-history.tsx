@@ -1,7 +1,7 @@
 "use client";
 
 import { isToday, isYesterday, subMonths, subWeeks } from "date-fns";
-import { motion } from "framer-motion";
+import { Info } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import type { User } from "next-auth";
 import { useState } from "react";
@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/sidebar";
 import type { Chat } from "@/lib/db/schema";
 import { fetcher } from "@/utils/functions";
-import { Loader2, Info } from "lucide-react";
 import { ChatItem } from "./sidebar-history-item";
 
 type GroupedChats = {
@@ -107,7 +106,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 			} else {
 				toast.error("Failed to delete chat");
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error("Failed to delete chat");
 		}
 
@@ -292,10 +291,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 				</SidebarGroupContent>
 			</SidebarGroup>
 
-			<AlertDialog
-				onOpenChange={setShowDeleteDialog}
-				open={showDeleteDialog}
-			>
+			<AlertDialog onOpenChange={setShowDeleteDialog} open={showDeleteDialog}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -315,4 +311,3 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 		</>
 	);
 }
-

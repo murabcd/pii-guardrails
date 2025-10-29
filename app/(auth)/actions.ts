@@ -1,6 +1,6 @@
 "use server";
 
-import { createUser, getUser } from "../db";
+import { createUser, getUser } from "@/lib/db/db";
 import { signIn } from "./auth";
 
 export interface LoginActionState {

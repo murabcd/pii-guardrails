@@ -3,8 +3,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { SparklesIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Markdown } from "./markdown";
 import { cn } from "@/lib/utils";
+import { Markdown } from "./markdown";
 import { Shimmer } from "./shimmer";
 
 export const Message = ({

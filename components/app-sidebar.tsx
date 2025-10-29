@@ -1,12 +1,12 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "next-auth";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
-import { Plus, Trash2 } from "lucide-react";
 import { SidebarHistory } from "@/components/sidebar-history";
 import { SidebarUserNav } from "@/components/sidebar-user-nav";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import {
 	SidebarMenu,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -29,6 +28,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "./ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function AppSidebar({ user }: { user: User | undefined }) {
 	const router = useRouter();
@@ -50,7 +50,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
 			} else {
 				toast.error("Failed to delete all chats");
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error("Failed to delete all chats");
 		}
 	};

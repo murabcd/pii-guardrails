@@ -49,7 +49,9 @@ function shouldLog(level: LogLevel): boolean {
  * Safe data sanitization - removes potentially sensitive information
  * Only include metadata, never actual text content
  */
-function sanitizeLogData(data: Record<string, unknown>): Record<string, unknown> {
+function sanitizeLogData(
+	data: Record<string, unknown>,
+): Record<string, unknown> {
 	const sanitized: Record<string, unknown> = {};
 
 	// Allowed keys that are safe to log
@@ -74,6 +76,31 @@ function sanitizeLogData(data: Record<string, unknown>): Record<string, unknown>
 		"hasGuardrailInstructions",
 		"type",
 		"modelMessagesCount",
+		// Reranker-specific keys
+		"documentCount",
+		"topN",
+		"queryLength",
+		"resultsCount",
+		"tokensUsed",
+		"originalCount",
+		"rerankedCount",
+		"originalPosition",
+		"newPosition",
+		"relevanceScore",
+		"originalSimilarity",
+		"error",
+		// Hybrid search keys
+		"useHybrid",
+		"hasMetadataFilter",
+		"hasVectorScores",
+		"hasFtsRanks",
+		// Chunking keys
+		"originalLength",
+		"cleanedLength",
+		"estimatedTokens",
+		"chunkCount",
+		"averageChunkSize",
+		"averageTokensPerChunk",
 	];
 
 	for (const [key, value] of Object.entries(data)) {
@@ -122,6 +149,13 @@ export const guardrailLogger = {
 		if (process.env.NODE_ENV === "development") {
 			console.log(`[Guardrail Dev] ${message}`, data);
 		}
+	},
+
+	/**
+	 * Check if a specific log level is enabled
+	 */
+	isEnabled: (level: LogLevel): boolean => {
+		return shouldLog(level);
 	},
 };
 

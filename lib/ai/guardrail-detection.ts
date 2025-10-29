@@ -1,7 +1,7 @@
 import { regex } from "arkregex";
+import { trackDetection } from "./guardrail-telemetry";
 import type { GuardrailEntityType } from "./guardrails";
 import { guardrailLogger } from "./logger";
-import { trackDetection } from "./guardrail-telemetry";
 
 /**
  * Guardrail Detection result matching OpenAI Guardrails format
@@ -22,30 +22,121 @@ export interface GuardrailDetectionResult {
  */
 const CYRILLIC_WHITELIST = new Set([
 	// Months (capitalized and lowercase)
-	"Январь", "январь", "Февраль", "февраль", "Март", "март",
-	"Апрель", "апрель", "Май", "май", "Июнь", "июнь",
-	"Июль", "июль", "Август", "август", "Сентябрь", "сентябрь",
-	"Октябрь", "октябрь", "Ноябрь", "ноябрь", "Декабрь", "декабрь",
+	"Январь",
+	"январь",
+	"Февраль",
+	"февраль",
+	"Март",
+	"март",
+	"Апрель",
+	"апрель",
+	"Май",
+	"май",
+	"Июнь",
+	"июнь",
+	"Июль",
+	"июль",
+	"Август",
+	"август",
+	"Сентябрь",
+	"сентябрь",
+	"Октябрь",
+	"октябрь",
+	"Ноябрь",
+	"ноябрь",
+	"Декабрь",
+	"декабрь",
 	// Countries & Cities
-	"Россия", "россия", "Москва", "москва", "Украина", "украина",
-	"Беларусь", "беларусь", "Казахстан", "казахстан",
-	"Санкт", "Петербург", "санкт", "петербург",
+	"Россия",
+	"россия",
+	"Москва",
+	"москва",
+	"Украина",
+	"украина",
+	"Беларусь",
+	"беларусь",
+	"Казахстан",
+	"казахстан",
+	"Санкт",
+	"Петербург",
+	"санкт",
+	"петербург",
 	// Common greetings/words
-	"Добрый", "добрый", "День", "день", "Утро", "утро",
-	"Вечер", "вечер", "Здравствуйте", "здравствуйте",
-	"Спасибо", "спасибо", "Пожалуйста", "пожалуйста",
+	"Добрый",
+	"добрый",
+	"День",
+	"день",
+	"Утро",
+	"утро",
+	"Вечер",
+	"вечер",
+	"Здравствуйте",
+	"здравствуйте",
+	"Спасибо",
+	"спасибо",
+	"Пожалуйста",
+	"пожалуйста",
 	// Days of week
-	"Понедельник", "понедельник", "Вторник", "вторник",
-	"Среда", "среда", "Четверг", "четверг", "Пятница", "пятница",
-	"Суббота", "суббота", "Воскресенье", "воскресенье",
+	"Понедельник",
+	"понедельник",
+	"Вторник",
+	"вторник",
+	"Среда",
+	"среда",
+	"Четверг",
+	"четверг",
+	"Пятница",
+	"пятница",
+	"Суббота",
+	"суббота",
+	"Воскресенье",
+	"воскресенье",
 	// Common prepositions and conjunctions (lowercase only to avoid over-filtering)
-	"на", "в", "с", "и", "а", "но", "или", "для", "по", "от", "до", "из",
-	"при", "про", "под", "над", "без", "через", "между", "перед", "за",
+	"на",
+	"в",
+	"с",
+	"и",
+	"а",
+	"но",
+	"или",
+	"для",
+	"по",
+	"от",
+	"до",
+	"из",
+	"при",
+	"про",
+	"под",
+	"над",
+	"без",
+	"через",
+	"между",
+	"перед",
+	"за",
 	// Common verbs that might be detected
-	"был", "была", "было", "были", "есть", "было", "будет", "будут",
-	"позвонил", "написал", "встретил", "встретился", "сказал", "сделал",
+	"был",
+	"была",
+	"было",
+	"были",
+	"есть",
+	"было",
+	"будет",
+	"будут",
+	"позвонил",
+	"написал",
+	"встретил",
+	"встретился",
+	"сказал",
+	"сделал",
 	// Common nouns
-	"это", "столица", "город", "страна", "год", "время", "человек", "дом",
+	"это",
+	"столица",
+	"город",
+	"страна",
+	"год",
+	"время",
+	"человек",
+	"дом",
 ]);
 
 /**
@@ -76,11 +167,17 @@ export function detectAndMask(
 	} = {};
 
 	// Collect ALL entity positions before masking to avoid position shifting issues
-	const allMaskPositions: Array<{ start: number; end: number; type: string; placeholder: string }> = [];
+	const allMaskPositions: Array<{
+		start: number;
+		end: number;
+		type: string;
+		placeholder: string;
+	}> = [];
 
 	// If no entities specified, detect all
 	const entitiesToDetect =
-		enabledEntities || (["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
+		enabledEntities ||
+		(["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
 
 	guardrailLogger.info("Starting detection", {
 		textLength: text.length,
@@ -116,7 +213,9 @@ export function detectAndMask(
 		const maskedPositions: Array<{ start: number; end: number }> = [];
 
 		// Find multi-word capitalized names FIRST (higher priority, longer matches)
-		const multiWordMatches = [...text.matchAll(russianNamePatternCapitalizedMulti)];
+		const multiWordMatches = [
+			...text.matchAll(russianNamePatternCapitalizedMulti),
+		];
 		for (const match of multiWordMatches) {
 			const name = match[0];
 			const start = match.index ?? 0;
@@ -133,7 +232,9 @@ export function detectAndMask(
 		}
 
 		// Find single-word capitalized names (but check whitelist strictly)
-		const singleWordMatches = [...text.matchAll(russianNamePatternCapitalizedSingle)];
+		const singleWordMatches = [
+			...text.matchAll(russianNamePatternCapitalizedSingle),
+		];
 		for (const match of singleWordMatches) {
 			const name = match[0];
 			const start = match.index ?? 0;
@@ -141,7 +242,9 @@ export function detectAndMask(
 
 			// Skip if this overlaps with already detected multi-word names
 			const overlaps = maskedPositions.some(
-				(pos) => (start >= pos.start && start < pos.end) || (end > pos.start && end <= pos.end)
+				(pos) =>
+					(start >= pos.start && start < pos.end) ||
+					(end > pos.start && end <= pos.end),
 			);
 
 			// Skip whitelisted words and overlaps
@@ -164,7 +267,9 @@ export function detectAndMask(
 
 			// Skip if overlaps or has whitelisted words
 			const overlaps = maskedPositions.some(
-				(pos) => (start >= pos.start && start < pos.end) || (end > pos.start && end <= pos.end)
+				(pos) =>
+					(start >= pos.start && start < pos.end) ||
+					(end > pos.start && end <= pos.end),
 			);
 
 			if (!overlaps && !hasWhitelistedWord && words.length >= 2) {
@@ -182,7 +287,11 @@ export function detectAndMask(
 
 			// Add all name positions to the global mask positions list
 			for (const pos of maskedPositions) {
-				allMaskPositions.push({ ...pos, type: "RUSSIAN_NAME", placeholder: "<RUSSIAN_NAME>" });
+				allMaskPositions.push({
+					...pos,
+					type: "RUSSIAN_NAME",
+					placeholder: "<RUSSIAN_NAME>",
+				});
 			}
 		}
 	}
@@ -232,7 +341,7 @@ export function detectAndMask(
 				(pos) =>
 					(start >= pos.start && start < pos.end) ||
 					(end > pos.start && end <= pos.end) ||
-					(start <= pos.start && end >= pos.end)
+					(start <= pos.start && end >= pos.end),
 			);
 
 			if (!overlaps) {
@@ -253,7 +362,7 @@ export function detectAndMask(
 				(pos) =>
 					(start >= pos.start && start < pos.end) ||
 					(end > pos.start && end <= pos.end) ||
-					(start <= pos.start && end >= pos.end)
+					(start <= pos.start && end >= pos.end),
 			);
 
 			// Filter out years (1900-2099) and common non-PII patterns
@@ -275,7 +384,11 @@ export function detectAndMask(
 
 			// Add all number positions to the global mask positions list
 			for (const pos of detectedPositions) {
-				allMaskPositions.push({ ...pos, type: "NUMBER", placeholder: "<NUMBER>" });
+				allMaskPositions.push({
+					...pos,
+					type: "NUMBER",
+					placeholder: "<NUMBER>",
+				});
 			}
 		}
 	}
@@ -315,7 +428,11 @@ export function detectAndMask(
 
 			// Add all email positions to the global mask positions list
 			for (const pos of emailPositions) {
-				allMaskPositions.push({ ...pos, type: "EMAIL", placeholder: "<EMAIL>" });
+				allMaskPositions.push({
+					...pos,
+					type: "EMAIL",
+					placeholder: "<EMAIL>",
+				});
 			}
 		}
 	}
@@ -327,7 +444,10 @@ export function detectAndMask(
 		const sortedPositions = allMaskPositions.sort((a, b) => b.start - a.start);
 
 		for (const pos of sortedPositions) {
-			maskedText = maskedText.substring(0, pos.start) + pos.placeholder + maskedText.substring(pos.end);
+			maskedText =
+				maskedText.substring(0, pos.start) +
+				pos.placeholder +
+				maskedText.substring(pos.end);
 		}
 	}
 
@@ -341,7 +461,9 @@ export function detectAndMask(
 	};
 
 	// Track telemetry
-	const entityTypes: GuardrailEntityType[] = Object.keys(detected_entities).filter(
+	const entityTypes: GuardrailEntityType[] = Object.keys(
+		detected_entities,
+	).filter(
 		(key) => (detected_entities[key as GuardrailEntityType]?.length ?? 0) > 0,
 	) as GuardrailEntityType[];
 
@@ -370,4 +492,3 @@ export function detectAndMask(
 
 	return result;
 }
-

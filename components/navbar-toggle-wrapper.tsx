@@ -5,4 +5,3 @@
 export function NavbarToggleWrapper() {
 	return null;
 }
-

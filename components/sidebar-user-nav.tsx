@@ -1,10 +1,13 @@
 "use client";
 
-import { ChevronUp } from "lucide-react";
+import { ChevronUp, Loader2 } from "lucide-react";
 import Image from "next/image";
 import type { User } from "next-auth";
 import { signOut, useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
+import { useState } from "react";
+import { SettingsDialog } from "@/components/settings-dialog";
+import { useSettings } from "@/components/settings-provider";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -17,10 +20,6 @@ import {
 	SidebarMenuButton,
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Loader2 } from "lucide-react";
-import { SettingsDialog } from "@/components/settings-dialog";
-import { useSettings } from "@/components/settings-provider";
-import { useState } from "react";
 
 export function SidebarUserNav({ user }: { user: User }) {
 	const { status } = useSession();

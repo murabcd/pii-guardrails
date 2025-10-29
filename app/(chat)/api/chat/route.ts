@@ -1,12 +1,16 @@
 import { convertToModelMessages, streamText, wrapLanguageModel } from "ai";
 import { auth } from "@/app/(auth)/auth";
-import { createMessage, findSimilarChunksByFilePaths } from "@/lib/db/db";
 import { customModel } from "@/lib/ai";
+import {
+	generateContextInstruction,
+	generateSystemPrompt,
+} from "@/lib/ai/guardrail-prompt-utils";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 import { detectAndMask } from "@/lib/ai/guardrails";
 import { guardrailLogger } from "@/lib/ai/logger";
 import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
-import { generateContextInstruction, generateSystemPrompt } from "@/lib/ai/guardrail-prompt-utils";
+import { rerankDocuments } from "@/lib/ai/reranker";
+import { createMessage, findSimilarChunksByFilePaths } from "@/lib/db/db";
 
 export async function POST(request: Request) {
 	const {
@@ -68,6 +72,7 @@ export async function POST(request: Request) {
 				),
 			});
 
+			// Use hybrid search (vector + full-text) for better relevance
 			const similarChunks = await findSimilarChunksByFilePaths({
 				query: ragQuery,
 				filePaths: selectedFilePathnames.map(
@@ -75,10 +80,30 @@ export async function POST(request: Request) {
 				),
 				limit: 10,
 				similarityThreshold,
+				useHybrid: true, // Enable hybrid search (vector + FTS)
+				// You can add metadata filtering here if needed
+				// metadataFilter: {
+				//   createdAfter: new Date('2024-01-01'),
+				//   source: 'pdf',
+				//   tags: ['important'],
+				// }
 			});
 
-			guardrailLogger.info("API route: RAG search complete", {
+			guardrailLogger.info("API route: RAG search complete (hybrid)", {
 				chunksFound: similarChunks.length,
+			});
+
+			// Rerank the results using Jina AI for better relevance
+			// This reorders the vector search results based on semantic relevance to the query
+			const rerankedChunks = await rerankDocuments(
+				ragQuery,
+				similarChunks,
+				10, // Keep top 10 after reranking
+			);
+
+			guardrailLogger.info("API route: Reranking complete", {
+				originalCount: similarChunks.length,
+				rerankedCount: rerankedChunks.length,
 			});
 
 			// NOW mask guardrails in the user message before sending to AI
@@ -120,7 +145,7 @@ export async function POST(request: Request) {
 			}
 
 			// Inject context into messages if we found relevant chunks
-			if (similarChunks.length > 0) {
+			if (rerankedChunks.length > 0) {
 				const hasMaskedGuardrails =
 					maskedMessageText !== null &&
 					/<NUMBER>|<EMAIL>|<RUSSIAN_NAME>/.test(maskedMessageText);
@@ -129,7 +154,7 @@ export async function POST(request: Request) {
 				// This ensures no guardrails from documents is sent to external LLM
 				const maskedChunks =
 					guardrailEnabledEntities && guardrailEnabledEntities.length > 0
-						? similarChunks.map((chunk, idx) => {
+						? rerankedChunks.map((chunk, idx) => {
 								const maskedResult = detectAndMask(
 									chunk.content,
 									guardrailEnabledEntities as GuardrailEntityType[],
@@ -140,7 +165,7 @@ export async function POST(request: Request) {
 								// Log if this chunk had guardrails masked
 								if (maskedResult.detected) {
 									guardrailLogger.info(
-										`API route: Masked RAG chunk ${idx + 1}/${similarChunks.length}`,
+										`API route: Masked RAG chunk ${idx + 1}/${rerankedChunks.length}`,
 										{
 											detected: true,
 											entityTypes: Object.keys(
@@ -162,16 +187,16 @@ export async function POST(request: Request) {
 									content: maskedResult.checked_text,
 								};
 							})
-						: similarChunks;
+						: rerankedChunks;
 
 				const maskedChunksCount = maskedChunks.filter(
-					(chunk, idx) => chunk.content !== similarChunks[idx]?.content,
+					(chunk, idx) => chunk.content !== rerankedChunks[idx]?.content,
 				).length;
 
 				guardrailLogger.info("API route: Masked RAG context chunks - Summary", {
-					totalChunks: similarChunks.length,
+					totalChunks: rerankedChunks.length,
 					maskedChunks: maskedChunksCount,
-					unmaskedChunks: similarChunks.length - maskedChunksCount,
+					unmaskedChunks: rerankedChunks.length - maskedChunksCount,
 					guardrailMaskingEnabled: !!(
 						guardrailEnabledEntities && guardrailEnabledEntities.length > 0
 					),

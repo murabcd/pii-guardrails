@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, Settings, Shield } from "lucide-react";
+import { Database, Shield } from "lucide-react";
 import * as React from "react";
 import {
 	Breadcrumb,
@@ -89,7 +89,10 @@ export function SettingsDialog({
 		setOpen(false);
 	};
 
-	const handleEntityToggle = (entityId: GuardrailEntityType, checked: boolean) => {
+	const handleEntityToggle = (
+		entityId: GuardrailEntityType,
+		checked: boolean,
+	) => {
 		if (checked) {
 			setLocalEntities([...localEntities, entityId]);
 		} else {

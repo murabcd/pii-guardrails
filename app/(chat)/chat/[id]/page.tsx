@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
-import { getChatById } from "@/lib/db/db";
 import { Chat as PreviewChat } from "@/components/chat";
+import { getChatById } from "@/lib/db/db";
 import type { Chat } from "@/lib/db/schema";
 
 export default async function Page({

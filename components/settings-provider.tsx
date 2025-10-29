@@ -1,12 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Session } from "next-auth";
-import type { GuardrailEntityType } from "@/lib/ai/guardrails";
+import type React from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
 	loadGuardrailSettings,
 	saveGuardrailSettings,
 } from "@/lib/ai/guardrail-settings-storage";
+import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 
 type SettingsContextType = {
 	similarityThreshold: number;
@@ -15,7 +16,9 @@ type SettingsContextType = {
 	setEnabledEntities: (entities: GuardrailEntityType[]) => void;
 };
 
-const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const SettingsContext = createContext<SettingsContextType | undefined>(
+	undefined,
+);
 
 export function useSettings() {
 	const context = useContext(SettingsContext);
@@ -84,4 +87,3 @@ export function SettingsProvider({
 		</SettingsContext.Provider>
 	);
 }
-
