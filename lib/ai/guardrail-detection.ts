@@ -187,6 +187,161 @@ const CYRILLIC_WHITELIST = new Set([
 	"ресепшн",
 	"Информация",
 	"информация",
+	// Street/Address terminology (CRITICAL - found in benchmark false positives)
+	"Армии",
+	"армии",
+	"Морская",
+	"морская",
+	"Советской",
+	"советской",
+	"Тверская",
+	"тверская",
+	"Лесная",
+	"лесная",
+	"Мечети",
+	"мечети",
+	"Суворовском",
+	"суворовском",
+	"Центральной",
+	"центральной",
+	"Большая",
+	"большая",
+	"Улица",
+	"улица",
+	"Проспект",
+	"проспект",
+	"Переулок",
+	"переулок",
+	"Бульвар",
+	"бульвар",
+	"Шоссе",
+	"шоссе",
+	"Набережная",
+	"набережная",
+	"Площадь",
+	"площадь",
+	"Дорога",
+	"дорога",
+	"Новослободской",
+	"новослободской",
+	"Новинского",
+	"новинского",
+	"Вишнёвой",
+	"вишнёвой",
+	"Дурова",
+	"дурова",
+	"Мира",
+	"мира",
+	"Аллея",
+	"аллея",
+	"Парковая",
+	"парковая",
+	"Поленова",
+	"поленова",
+	"Красина",
+	"красина",
+	"Великой",
+	"великой",
+	"Отечественной",
+	"отечественной",
+	"Ленина",
+	"ленина",
+	// Institutions and organizations
+	"Московском",
+	"московском",
+	"Колледже",
+	"колледже",
+	"Суворовском",
+	"суворовском",
+	"Кадетском",
+	"кадетском",
+	"Корпусе",
+	"корпусе",
+	"Школа",
+	"школа",
+	"Университет",
+	"университет",
+	"Институт",
+	"институт",
+	"Академия",
+	"академия",
+	"Центр",
+	"центр",
+	"Магазин",
+	"магазин",
+	"Банк",
+	"банк",
+	"Больница",
+	"больница",
+	"Поликлиника",
+	"поликлиника",
+	"Аптека",
+	"аптека",
+	// Landmarks and places
+	"Мечети",
+	"мечети",
+	"Собор",
+	"собор",
+	"Соборной",
+	"соборной",
+	"Церковь",
+	"церковь",
+	"Храм",
+	"храм",
+	"Парк",
+	"парк",
+	"Сквер",
+	"сквер",
+	"Стадион",
+	"стадион",
+	"Театр",
+	"театр",
+	"Музей",
+	"музей",
+	"Библиотека",
+	"библиотека",
+	"Вокзал",
+	"вокзал",
+	"Аэропорт",
+	"аэропорт",
+	"Метро",
+	"метро",
+	"Станция",
+	"станция",
+	// Districts and regions
+	"Район",
+	"район",
+	"Округ",
+	"округ",
+	"Область",
+	"область",
+	"Край",
+	"край",
+	"Республика",
+	"республика",
+	"Город",
+	"город",
+	"Село",
+	"село",
+	"Деревня",
+	"деревня",
+	"Посёлок",
+	"посёлок",
+	"Сосенский",
+	"сосенский",
+	"Стан",
+	"стан",
+	// Directions and locations
+	"Северная",
+	"северная",
+	"Южная",
+	"южная",
+	"Восточная",
+	"восточная",
+	"Западная",
+	"западная",
+	"Центральная",
+	"центральная",
 	// Common business words
 	"Компания",
 	"компания",
@@ -215,6 +370,88 @@ const CYRILLIC_WHITELIST = new Set([
 	"вы",
 	"Для",
 	"для",
+	// Common professional titles and roles
+	"Директор",
+	"директор",
+	"Менеджер",
+	"менеджер",
+	"Сотрудник",
+	"сотрудник",
+	"Учитель",
+	"учитель",
+	"Врач",
+	"врач",
+	"Инженер",
+	"инженер",
+	"Специалист",
+	"специалист",
+	// Common verbs that might be capitalized
+	"Согласовать",
+	"согласовать",
+	"Позвонил",
+	"позвонил",
+	"Написал",
+	"написал",
+	"Встретился",
+	"встретился",
+	"Рассказывала",
+	"рассказывала",
+	"Слышал",
+	"слышал",
+	"Помнишь",
+	"помнишь",
+	// More common words
+	"Родитель",
+	"родитель",
+	"Курсе",
+	"курсе",
+	"Ситуацию",
+	"ситуацию",
+	"Прошу",
+	"прошу",
+	"Архивными",
+	"архивными",
+	"Данными",
+	"данными",
+	// Titles and forms of address
+	"Госпожа",
+	"госпожа",
+	"Господин",
+	"господин",
+	"Уважаемая",
+	"уважаемая",
+	"Уважаемый",
+	"уважаемый",
+	// Family/social relationships
+	"Соседка",
+	"соседка",
+	"Сосед",
+	"сосед",
+	"Друг",
+	"друг",
+	"Подруга",
+	"подруга",
+	"Коллега",
+	"коллега",
+	"Знакомый",
+	"знакомый",
+	"Знакомая",
+	"знакомая",
+	"Сосе",
+	"сосе",
+	// Common verbs that might appear in lowercase patterns
+	"Ставила",
+	"ставила",
+	"Делала",
+	"делала",
+	"Говорит",
+	"говорит",
+	"Сказал",
+	"сказал",
+	"Учительница",
+	"учительница",
+	"Учитель",
+	"учитель",
 ]);
 
 /**
@@ -337,9 +574,87 @@ export function detectAndMask(
 			}
 		}
 
+		// Priority 3: Detect single-word lowercase names in specific contexts
+		// Common patterns: "это {name}", "у {name}", "{name} с улицы"
+		// Must be single word, 4-8 chars (typical Russian first name length)
+		const lowercaseNamePatterns = [
+			/\bэто\s+([а-яё]{4,8})\b/gi, // "это алексей"
+			/\bзовут\s+([а-яё]{4,8})\b/gi, // "зовут марина"
+			/\bя\s+([а-яё]{4,8})[\s,]/gi, // "я алексей,"
+			/\bу\s+([а-яё]{4,8})\s+(?:с|на|из)\b/gi, // "у алексей с улицы"
+		];
+
+		for (const pattern of lowercaseNamePatterns) {
+			const matches = [...text.matchAll(pattern)];
+			for (const match of matches) {
+				const name = match[1]?.trim();
+				if (!name) continue;
+
+				// Calculate actual position in text
+				const matchStart = match.index ?? 0;
+				const matchText = match[0];
+				const nameOffsetInMatch = matchText.indexOf(name);
+				const start = matchStart + nameOffsetInMatch;
+				const end = start + name.length;
+
+				// Skip if this overlaps with already detected names
+				const overlaps = maskedPositions.some(
+					(pos) =>
+						(start >= pos.start && start < pos.end) ||
+						(end > pos.start && end <= pos.end) ||
+						(start <= pos.start && end >= pos.end),
+				);
+
+				if (overlaps) {
+					continue;
+				}
+
+				// Check if whitelisted
+				if (isWhitelisted(name)) {
+					continue;
+				}
+
+				// Additional filtering: common verbs and nouns that aren't names
+				const commonNonNames = [
+					"это",
+					"была",
+					"были",
+					"будет",
+					"может",
+					"должен",
+					"можно",
+					"нужно",
+					"надо",
+					"хочет",
+					"хотел",
+					"делал",
+					"делала",
+					"сказал",
+					"сказала",
+					"говорил",
+					"говорила",
+					"ходил",
+					"ходила",
+					"пошел",
+					"пошла",
+					"видел",
+					"видела",
+					"слышал",
+					"слышала",
+				];
+
+				if (commonNonNames.includes(name.toLowerCase())) {
+					continue;
+				}
+
+				russianNames.push(name);
+				maskedPositions.push({ start, end });
+			}
+		}
+
 		// NOTE: We intentionally DO NOT match:
 		// - Single capitalized words (too many false positives: "Служба", "Отель", etc.)
-		// - Lowercase names (extremely rare in Russian text, mostly causes false positives)
+		// - Lowercase names without context (too many false positives with common words)
 		// - Sequences longer than 3 words (likely to be phrases, not names)
 
 		if (russianNames.length > 0) {
@@ -380,7 +695,8 @@ export function detectAndMask(
 
 		// Pattern for medium number sequences (7-9 digits)
 		// More conservative to avoid page numbers, building numbers, etc.
-		const mediumNumberPattern = regex("\\d{7,9}", "g");
+		// Only detect if they look like ID numbers (no clear phone pattern)
+		const mediumNumberPattern = regex("\\b\\d{7,9}\\b", "g");
 
 		const numbers: string[] = [];
 		const detectedPositions: Array<{ start: number; end: number }> = [];

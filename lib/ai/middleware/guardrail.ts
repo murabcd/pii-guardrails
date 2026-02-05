@@ -6,9 +6,9 @@ import type {
 } from "@ai-sdk/provider";
 import type { GuardrailEntityType } from "../guardrails";
 import {
-	TokenVault,
 	detectAndMask,
 	getDefaultGuardrailEntities,
+	type TokenVault,
 } from "../guardrails";
 import { guardrailLogger } from "../logger";
 

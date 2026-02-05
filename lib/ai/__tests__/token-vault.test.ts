@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { TokenVault } from "../token-vault";
 import { detectAndMask } from "../guardrail-detection";
+import { TokenVault } from "../token-vault";
 
 describe("TokenVault - Basic Operations", () => {
 	it("should store and retrieve a single token", () => {
@@ -193,9 +193,7 @@ describe("TokenVault - Integration with detectAndMask", () => {
 		// Unmask the output
 		const unmaskedText = vault.unmask(result.checked_text);
 
-		expect(unmaskedText).toBe(
-			"позвоните Иван Петров по номеру +79856004025",
-		);
+		expect(unmaskedText).toBe("позвоните Иван Петров по номеру +79856004025");
 	});
 
 	it("should work without TokenVault (backward compatibility)", () => {
@@ -360,8 +358,7 @@ describe("TokenVault - Full Round-Trip (Input → LLM → Output)", () => {
 		vault.store("NUMBER", "+79856004025");
 
 		// LLM might respond without using the placeholder
-		const llmResponse =
-			"Извините, я не могу найти информацию об этом номере.";
+		const llmResponse = "Извините, я не могу найти информацию об этом номере.";
 
 		const unmaskedText = vault.unmask(llmResponse);
 
@@ -421,11 +418,15 @@ describe("TokenVault - Streaming Scenarios", () => {
 
 		// Second placeholder starts
 		buffer += " по номеру <NUMBER";
-		expect(vault.unmask(buffer)).toBe("Позвоните Иван Иванов по номеру <NUMBER");
+		expect(vault.unmask(buffer)).toBe(
+			"Позвоните Иван Иванов по номеру <NUMBER",
+		);
 
 		// Second placeholder completes
 		buffer += "_1>";
-		expect(vault.unmask(buffer)).toBe("Позвоните Иван Иванов по номеру +79856004025");
+		expect(vault.unmask(buffer)).toBe(
+			"Позвоните Иван Иванов по номеру +79856004025",
+		);
 	});
 
 	it("should correctly unmask when buffer contains incomplete placeholder at end", () => {

@@ -45,9 +45,7 @@ describe("detectAndMask - Russian Names", () => {
 
 		expect(result.detected).toBe(false);
 		expect(result.detected_entities.RUSSIAN_NAME || []).toHaveLength(0);
-		expect(result.checked_text).toBe(
-			"иван иванов встретился с петр петров",
-		);
+		expect(result.checked_text).toBe("иван иванов встретился с петр петров");
 	});
 
 	it("should NOT detect whitelisted words (months)", () => {
