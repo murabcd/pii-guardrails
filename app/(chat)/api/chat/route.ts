@@ -346,7 +346,7 @@ export async function POST(request: Request) {
 
 						// Special SSE messages that don't contain JSON
 						if (dataContent === "[DONE]") {
-							controller.enqueue(new TextEncoder().encode(line + "\n"));
+							controller.enqueue(new TextEncoder().encode(`${line}\n`));
 							continue;
 						}
 
@@ -405,15 +405,15 @@ export async function POST(request: Request) {
 
 							// Re-encode the JSON and SSE format
 							const unmaskedLine = `data: ${JSON.stringify(jsonData)}`;
-							controller.enqueue(new TextEncoder().encode(unmaskedLine + "\n"));
+							controller.enqueue(new TextEncoder().encode(`${unmaskedLine}\n`));
 						} catch (parseError) {
 							// If JSON parsing fails, pass through original line
 							console.warn("[API] Failed to parse SSE JSON:", parseError);
-							controller.enqueue(new TextEncoder().encode(line + "\n"));
+							controller.enqueue(new TextEncoder().encode(`${line}\n`));
 						}
 					} else {
 						// Non-SSE line, pass through as-is
-						controller.enqueue(new TextEncoder().encode(line + "\n"));
+						controller.enqueue(new TextEncoder().encode(`${line}\n`));
 					}
 				}
 
