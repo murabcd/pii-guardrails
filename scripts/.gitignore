@@ -1,0 +1,9 @@
+# Generated benchmark results
+jayguard-benchmark-results.json
+jayguard-analysis.json
+jayguard-benchmark.json
+
+# Python temporary files
+convert_parquet.py
+*.pyc
+__pycache__/
