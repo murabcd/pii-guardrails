@@ -1,17 +1,18 @@
 import { list } from "@vercel/blob";
+import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
 
-export async function GET() {
+export async function GET(request: Request) {
 	const session = await auth();
 
 	if (!session) {
-		return Response.redirect("/login");
+		return NextResponse.redirect(new URL("/login", request.url));
 	}
 
 	const { user } = session;
 
 	if (!user || !user.email) {
-		return Response.redirect("/login");
+		return NextResponse.redirect(new URL("/login", request.url));
 	}
 
 	try {
