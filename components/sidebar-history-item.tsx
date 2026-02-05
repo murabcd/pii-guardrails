@@ -1,3 +1,4 @@
+import { isTextUIPart } from "ai";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { memo } from "react";
@@ -27,11 +28,9 @@ const PureChatItem = ({
 }) => {
 	const chatTitle =
 		chat.messages[0]?.parts
-			?.filter((part: any) => part.type === "text")
-			.map((part: any) => part.text)
-			.join(" ") ||
-		(chat.messages[0] as any)?.content ||
-		"Untitled Chat";
+			?.filter(isTextUIPart)
+			.map((part) => part.text)
+			.join(" ") || "Untitled Chat";
 
 	return (
 		<SidebarMenuItem>

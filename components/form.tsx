@@ -2,7 +2,7 @@ export function Form({
 	action,
 	children,
 }: {
-	action: any;
+	action: React.ComponentProps<"form">["action"];
 	children: React.ReactNode;
 }) {
 	return (

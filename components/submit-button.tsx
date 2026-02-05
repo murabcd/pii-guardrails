@@ -18,9 +18,9 @@ export function SubmitButton({ children }: { children: React.ReactNode }) {
 					<Loader2 size={16} className="text-current" />
 				</span>
 			)}
-			<span aria-live="polite" className="sr-only" role="status">
+			<output aria-live="polite" className="sr-only">
 				{pending ? "Loading" : "Submit form"}
-			</span>
+			</output>
 		</button>
 	);
 }
