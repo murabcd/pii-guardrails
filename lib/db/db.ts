@@ -90,7 +90,7 @@ export async function insertDocument({
 		filePath,
 		source,
 		author,
-		metadata: metadata ? (metadata as any) : null,
+		metadata: metadata ?? null,
 		createdAt: new Date(),
 	});
 }

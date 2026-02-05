@@ -219,16 +219,31 @@ export async function findSimilarChunksHybrid(
 		try {
 			const results = await db.execute(hybridQuery);
 
+			const resultKeys =
+				typeof results === "object" && results !== null
+					? Object.keys(results as object)
+					: [];
+			const hasRows =
+				typeof results === "object" &&
+				results !== null &&
+				"rows" in results &&
+				Array.isArray((results as { rows?: unknown }).rows);
+			const rows = hasRows
+				? ((results as { rows: SearchResult[] }).rows ?? [])
+				: [];
+
 			// Debug: Log the structure of results
 			guardrailLogger.info("Hybrid search: Raw results structure", {
 				isArray: Array.isArray(results),
-				hasRows: !!(results as any)?.rows,
+				hasRows,
 				type: typeof results,
-				keys: results ? Object.keys(results as any) : [],
+				keys: resultKeys,
 			});
 
 			// Extract rows from result - postgres.js returns rows directly in the result object
-			const typedResults = (Array.isArray(results) ? results : (results as any).rows || []) as SearchResult[];
+			const typedResults = (
+				Array.isArray(results) ? results : rows
+			) as SearchResult[];
 
 			guardrailLogger.info("Hybrid search: Search complete", {
 				resultsCount: typedResults.length,
