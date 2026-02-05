@@ -6,7 +6,7 @@ import type {
 } from "@ai-sdk/provider";
 import type { GuardrailEntityType } from "../guardrails";
 import {
-	detectAndMask,
+	detectAndMaskWithNer,
 	getDefaultGuardrailEntities,
 	type TokenVault,
 } from "../guardrails";
@@ -49,60 +49,63 @@ export function createGuardrailMiddleware(
 			// Handle prompt as array of messages
 			if (Array.isArray(params.prompt)) {
 				let maskedCount = 0;
-				const maskedPrompt = params.prompt.map(
-					(message: LanguageModelV2Message) => {
-						// Only process user messages
-						if (message.role !== "user") {
-							return message;
+				const maskedPrompt: LanguageModelV2Message[] = [];
+				for (const message of params.prompt) {
+					if (message.role !== "user") {
+						maskedPrompt.push(message);
+						continue;
+					}
+
+					if (Array.isArray(message.content)) {
+						const maskedContent = [];
+						for (const part of message.content) {
+							if (part.type !== "text") {
+								maskedContent.push(part);
+								continue;
+							}
+
+							const isAlreadyMasked =
+								/<(?:NUMBER|EMAIL|RUSSIAN_NAME)(?:_\\d+)?>/.test(part.text);
+							if (isAlreadyMasked) {
+								guardrailLogger.debug("Text already masked, skipping", {
+									textLength: part.text.length,
+								});
+								maskedContent.push(part);
+								continue;
+							}
+
+							const result = await detectAndMaskWithNer(
+								part.text,
+								entitiesToUse,
+								userEmail,
+								"middleware",
+								tokenVault,
+							);
+							if (result.detected) {
+								maskedCount++;
+								guardrailLogger.info("Masked user message in middleware", {
+									detected: result.detected,
+									textLength: part.text.length,
+									maskedLength: result.checked_text.length,
+								});
+								maskedContent.push({
+									...part,
+									text: result.checked_text,
+								});
+							} else {
+								maskedContent.push(part);
+							}
 						}
 
-						// Handle array content (multimodal)
-						if (Array.isArray(message.content)) {
-							const maskedContent = message.content.map((part) => {
-								if (part.type === "text") {
-									// Skip guardrail detection if text is already masked (idempotency)
-									// This optimizes performance when transformParams is called multiple times
-									const isAlreadyMasked =
-										/<(?:NUMBER|EMAIL|RUSSIAN_NAME)>/.test(part.text);
-									if (isAlreadyMasked) {
-										guardrailLogger.debug("Text already masked, skipping", {
-											textLength: part.text.length,
-										});
-										return part;
-									}
+						maskedPrompt.push({
+							...message,
+							content: maskedContent,
+						});
+						continue;
+					}
 
-									const result = detectAndMask(
-										part.text,
-										entitiesToUse,
-										userEmail,
-										"middleware",
-										tokenVault,
-									);
-									if (result.detected) {
-										maskedCount++;
-										guardrailLogger.info("Masked user message in middleware", {
-											detected: result.detected,
-											textLength: part.text.length,
-											maskedLength: result.checked_text.length,
-										});
-										return {
-											...part,
-											text: result.checked_text,
-										};
-									}
-								}
-								return part;
-							});
-
-							return {
-								...message,
-								content: maskedContent,
-							};
-						}
-
-						return message;
-					},
-				);
+					maskedPrompt.push(message);
+				}
 
 				guardrailLogger.info("Middleware processing complete", {
 					maskedMessages: maskedCount,

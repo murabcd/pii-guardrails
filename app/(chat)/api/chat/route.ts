@@ -6,7 +6,7 @@ import {
 	generateSystemPrompt,
 } from "@/lib/ai/guardrail-prompt-utils";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
-import { detectAndMask, TokenVault } from "@/lib/ai/guardrails";
+import { detectAndMaskWithNer, TokenVault } from "@/lib/ai/guardrails";
 import { guardrailLogger } from "@/lib/ai/logger";
 import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
 import { rerankDocuments } from "@/lib/ai/reranker";
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 				guardrailEnabledEntities.length > 0 &&
 				typeof lastUserMessageContent === "string"
 			) {
-				const maskedResult = detectAndMask(
+				const maskedResult = await detectAndMaskWithNer(
 					lastUserMessageContent,
 					guardrailEnabledEntities as GuardrailEntityType[],
 					session.user?.email ?? undefined,
@@ -161,46 +161,48 @@ export async function POST(request: Request) {
 			if (rerankedChunks.length > 0) {
 				const hasMaskedGuardrails =
 					maskedMessageText !== null &&
-					/<NUMBER>|<EMAIL>|<RUSSIAN_NAME>/.test(maskedMessageText);
+					/<(?:NUMBER|EMAIL|RUSSIAN_NAME)(?:_\d+)?>/.test(maskedMessageText);
 
 				// CRITICAL SECURITY: Mask guardrails in RAG context chunks before sending to AI
 				// This ensures no guardrails from documents is sent to external LLM
 				const maskedChunks =
 					guardrailEnabledEntities && guardrailEnabledEntities.length > 0
-						? rerankedChunks.map((chunk, idx) => {
-								const maskedResult = detectAndMask(
-									chunk.content,
-									guardrailEnabledEntities as GuardrailEntityType[],
-									session.user?.email ?? undefined,
-									"rag_chunk",
-									tokenVault,
-								);
-
-								// Log if this chunk had guardrails masked
-								if (maskedResult.detected) {
-									guardrailLogger.info(
-										`API route: Masked RAG chunk ${idx + 1}/${rerankedChunks.length}`,
-										{
-											detected: true,
-											entityTypes: Object.keys(
-												maskedResult.detected_entities,
-											).filter(
-												(key) =>
-													(maskedResult.detected_entities[
-														key as GuardrailEntityType
-													]?.length ?? 0) > 0,
-											),
-											textLength: chunk.content.length,
-											maskedLength: maskedResult.checked_text.length,
-										},
+						? await Promise.all(
+								rerankedChunks.map(async (chunk, idx) => {
+									const maskedResult = await detectAndMaskWithNer(
+										chunk.content,
+										guardrailEnabledEntities as GuardrailEntityType[],
+										session.user?.email ?? undefined,
+										"rag_chunk",
+										tokenVault,
 									);
-								}
 
-								return {
-									...chunk,
-									content: maskedResult.checked_text,
-								};
-							})
+									// Log if this chunk had guardrails masked
+									if (maskedResult.detected) {
+										guardrailLogger.info(
+											`API route: Masked RAG chunk ${idx + 1}/${rerankedChunks.length}`,
+											{
+												detected: true,
+												entityTypes: Object.keys(
+													maskedResult.detected_entities,
+												).filter(
+													(key) =>
+														(maskedResult.detected_entities[
+															key as GuardrailEntityType
+														]?.length ?? 0) > 0,
+												),
+												textLength: chunk.content.length,
+												maskedLength: maskedResult.checked_text.length,
+											},
+										);
+									}
+
+									return {
+										...chunk,
+										content: maskedResult.checked_text,
+									};
+								}),
+							)
 						: rerankedChunks;
 
 				const maskedChunksCount = maskedChunks.filter(

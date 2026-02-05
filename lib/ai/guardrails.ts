@@ -29,7 +29,7 @@ export const GUARDRAIL_ENTITIES: Array<{
 ];
 
 // Re-export guardrail detection functions
-export { detectAndMask } from "./guardrail-detection";
+export { detectAndMask, detectAndMaskWithNer } from "./guardrail-detection";
 // Re-export guardrail settings storage functions
 export {
 	getDefaultGuardrailEntities,

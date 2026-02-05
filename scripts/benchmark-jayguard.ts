@@ -10,7 +10,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { GuardrailEntityType } from "../lib/ai/guardrails";
-import { detectAndMask } from "../lib/ai/guardrails";
+import { detectAndMask, detectAndMaskWithNer } from "../lib/ai/guardrails";
 
 interface BenchmarkSample {
 	tokens: string[];
@@ -189,10 +189,10 @@ function entitiesMatch(detected: string, groundTruth: string): boolean {
 /**
  * Evaluate a single sample
  */
-function evaluateSample(
+async function evaluateSample(
 	sampleId: number,
 	sample: BenchmarkSample,
-): DetectionResult {
+): Promise<DetectionResult> {
 	// Reconstruct text from tokens
 	const originalText = sample.tokens.join(" ");
 
@@ -205,12 +205,20 @@ function evaluateSample(
 	);
 
 	// Run your detector
-	const detectionResult = detectAndMask(
-		originalText,
-		["RUSSIAN_NAME", "NUMBER", "EMAIL"],
-		undefined,
-		"other",
-	);
+	const useNer = process.env.USE_NER === "true";
+	const detectionResult = useNer
+		? await detectAndMaskWithNer(
+				originalText,
+				["RUSSIAN_NAME", "NUMBER", "EMAIL"],
+				undefined,
+				"other",
+			)
+		: detectAndMask(
+				originalText,
+				["RUSSIAN_NAME", "NUMBER", "EMAIL"],
+				undefined,
+				"other",
+			);
 
 	// Collect all detected entities
 	const allDetected: Array<{ text: string; type: GuardrailEntityType }> = [];
@@ -306,7 +314,7 @@ function calculateMetrics(tp: number, fp: number, fn: number): EntityMetrics {
 /**
  * Run benchmark evaluation
  */
-function runBenchmark(samples: BenchmarkSample[]): BenchmarkResults {
+async function runBenchmark(samples: BenchmarkSample[]): Promise<BenchmarkResults> {
 	console.log(`\n🚀 Running benchmark on ${samples.length} samples...\n`);
 
 	const detailedResults: DetectionResult[] = [];
@@ -335,7 +343,7 @@ function runBenchmark(samples: BenchmarkSample[]): BenchmarkResults {
 	let processed = 0;
 	for (let i = 0; i < samples.length; i++) {
 		const sample = samples[i];
-		const result = evaluateSample(i, sample);
+		const result = await evaluateSample(i, sample);
 		detailedResults.push(result);
 
 		totalTP += result.truePositives.length;
@@ -647,6 +655,8 @@ function provideRecommendations(results: BenchmarkResults): void {
  */
 async function main() {
 	console.log("🚀 JayGuard Benchmark Evaluation\n");
+	const useNer = process.env.USE_NER === "true";
+	console.log(`🔬 NER mode: ${useNer ? "enabled" : "disabled"}\n`);
 
 	// Load benchmark data
 	const jsonPath = path.join(
@@ -672,7 +682,7 @@ async function main() {
 	console.log(`📊 Loaded ${samples.length} benchmark samples`);
 
 	// Run benchmark
-	const results = runBenchmark(samples);
+	const results = await runBenchmark(samples);
 
 	// Print report
 	printReport(results);

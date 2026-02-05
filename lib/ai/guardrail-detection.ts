@@ -461,46 +461,102 @@ function isWhitelisted(word: string): boolean {
 	return CYRILLIC_WHITELIST.has(word);
 }
 
-/**
- * Detect and mask Russian names, numbers, and emails in text
- * Uses ArkRegex for pattern matching
- * @param text - Text to detect and mask guardrails in
- * @param enabledEntities - Array of entity types to detect (defaults to all if not provided)
- * @param userEmail - Optional user email to exclude from masking
- * @param context - Context for telemetry tracking (default: "other")
- * @param tokenVault - Optional TokenVault to store original values for later unmasking
- */
-export function detectAndMask(
+type MaskPosition = {
+	start: number;
+	end: number;
+	type: GuardrailEntityType;
+	placeholder: "<RUSSIAN_NAME>" | "<NUMBER>" | "<EMAIL>";
+	originalValue: string;
+};
+
+type RegexDetectionResult = {
+	detectedEntities: GuardrailDetectionResult["detected_entities"];
+	maskPositions: MaskPosition[];
+};
+
+type NerSpan = {
+	start: number;
+	end: number;
+	label: string;
+	text: string;
+};
+
+const NER_SERVICE_URL = process.env.NER_SERVICE_URL;
+const NER_TIMEOUT_MS = Number(process.env.NER_TIMEOUT_MS ?? "1500");
+const NER_NAME_LABELS = new Set(["PER", "PERSON"]);
+
+function overlapsExisting(
+	start: number,
+	end: number,
+	positions: Array<{ start: number; end: number }>,
+): boolean {
+	return positions.some(
+		(pos) =>
+			(start >= pos.start && start < pos.end) ||
+			(end > pos.start && end <= pos.end) ||
+			(start <= pos.start && end >= pos.end),
+	);
+}
+
+function applyMaskPositions(
 	text: string,
-	enabledEntities?: GuardrailEntityType[],
-	userEmail?: string,
-	context: "user_message" | "rag_chunk" | "middleware" | "other" = "other",
+	positions: MaskPosition[],
 	tokenVault?: TokenVault,
-): GuardrailDetectionResult {
-	const detected_entities: {
-		RUSSIAN_NAME?: string[];
-		NUMBER?: string[];
-		EMAIL?: string[];
-	} = {};
+): string {
+	if (positions.length === 0) {
+		return text;
+	}
 
-	// Collect ALL entity positions before masking to avoid position shifting issues
-	const allMaskPositions: Array<{
-		start: number;
-		end: number;
-		type: string;
-		placeholder: string;
-		originalValue: string;
-	}> = [];
+	const sortedPositions = positions.sort((a, b) => b.start - a.start);
+	let maskedText = text;
 
-	// If no entities specified, detect all
-	const entitiesToDetect =
-		enabledEntities ||
-		(["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
+	for (const pos of sortedPositions) {
+		const placeholder = tokenVault
+			? tokenVault.store(pos.type, pos.originalValue)
+			: pos.placeholder;
+		maskedText =
+			maskedText.substring(0, pos.start) +
+			placeholder +
+			maskedText.substring(pos.end);
+	}
 
-	guardrailLogger.info("Starting detection", {
-		textLength: text.length,
-		entityTypes: entitiesToDetect,
-	});
+	return maskedText;
+}
+
+async function fetchNerSpans(text: string): Promise<NerSpan[]> {
+	if (!NER_SERVICE_URL) {
+		return [];
+	}
+
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), NER_TIMEOUT_MS);
+
+	try {
+		const response = await fetch(`${NER_SERVICE_URL}/ner`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ text }),
+			signal: controller.signal,
+		});
+
+		if (!response.ok) {
+			throw new Error(`NER service error: ${response.status}`);
+		}
+
+		const data = (await response.json()) as { spans?: NerSpan[] };
+		return Array.isArray(data.spans) ? data.spans : [];
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+function collectRegexDetections(
+	text: string,
+	entitiesToDetect: GuardrailEntityType[],
+	userEmail?: string,
+): RegexDetectionResult {
+	const detectedEntities: GuardrailDetectionResult["detected_entities"] = {};
+	const maskPositions: MaskPosition[] = [];
 
 	// Pattern for Russian names (Cyrillic characters, typically 2-3 words capitalized)
 	// CONSERVATIVE APPROACH: Only detect clear name patterns to avoid false positives
@@ -549,15 +605,7 @@ export function detectAndMask(
 			const start = match.index ?? 0;
 			const end = start + name.length;
 
-			// Skip if this overlaps with already detected 3-word names
-			const overlaps = maskedPositions.some(
-				(pos) =>
-					(start >= pos.start && start < pos.end) ||
-					(end > pos.start && end <= pos.end) ||
-					(start <= pos.start && end >= pos.end),
-			);
-
-			if (overlaps) {
+			if (overlapsExisting(start, end, maskedPositions)) {
 				continue;
 			}
 
@@ -597,15 +645,7 @@ export function detectAndMask(
 				const start = matchStart + nameOffsetInMatch;
 				const end = start + name.length;
 
-				// Skip if this overlaps with already detected names
-				const overlaps = maskedPositions.some(
-					(pos) =>
-						(start >= pos.start && start < pos.end) ||
-						(end > pos.start && end <= pos.end) ||
-						(start <= pos.start && end >= pos.end),
-				);
-
-				if (overlaps) {
+				if (overlapsExisting(start, end, maskedPositions)) {
 					continue;
 				}
 
@@ -652,22 +692,16 @@ export function detectAndMask(
 			}
 		}
 
-		// NOTE: We intentionally DO NOT match:
-		// - Single capitalized words (too many false positives: "Служба", "Отель", etc.)
-		// - Lowercase names without context (too many false positives with common words)
-		// - Sequences longer than 3 words (likely to be phrases, not names)
-
 		if (russianNames.length > 0) {
-			detected_entities.RUSSIAN_NAME = [...new Set(russianNames)]; // Remove duplicates
+			detectedEntities.RUSSIAN_NAME = [...new Set(russianNames)]; // Remove duplicates
 
 			guardrailLogger.info("Russian names detected", {
-				entityCounts: { RUSSIAN_NAME: detected_entities.RUSSIAN_NAME.length },
+				entityCounts: { RUSSIAN_NAME: detectedEntities.RUSSIAN_NAME.length },
 			});
 
-			// Add all name positions to the global mask positions list
 			for (const pos of maskedPositions) {
 				const originalValue = text.substring(pos.start, pos.end);
-				allMaskPositions.push({
+				maskPositions.push({
 					...pos,
 					type: "RUSSIAN_NAME",
 					placeholder: "<RUSSIAN_NAME>",
@@ -678,30 +712,17 @@ export function detectAndMask(
 	}
 
 	// Pattern for numbers (phone numbers: +7XXXXXXXXXX or 8XXXXXXXXXX, or sequences of digits)
-	// Russian phone numbers: +7 followed by 10 digits, or 8 followed by 10 digits
-	// Supports formatted numbers with spaces, dashes, parentheses
-	// Also detect other long number sequences (like ID numbers)
 	if (entitiesToDetect.includes("NUMBER")) {
-		// Pattern for Russian phone numbers with formatting
-		// Matches: +7 900 123-45-67, 8 (900) 123-45-67, +79001234567, 89001234567
 		const phonePattern = regex(
 			"(?:\\+7|8)\\s?[\\(]?\\d{3}[\\)]?[\\s-]?\\d{3}[\\s-]?\\d{2}[\\s-]?\\d{2}",
 			"g",
 		);
-
-		// Pattern for unformatted long numbers (10+ digits, optionally starting with +7 or 8)
-		// This handles cases like +79001234567890 (longer than standard phone)
 		const longNumberPattern = regex("(?:\\+7|8)?\\d{10,}", "g");
-
-		// Pattern for medium number sequences (7-9 digits)
-		// More conservative to avoid page numbers, building numbers, etc.
-		// Only detect if they look like ID numbers (no clear phone pattern)
 		const mediumNumberPattern = regex("\\b\\d{7,9}\\b", "g");
 
 		const numbers: string[] = [];
 		const detectedPositions: Array<{ start: number; end: number }> = [];
 
-		// Find long unformatted numbers FIRST (highest priority for longest matches)
 		const longMatches = [...text.matchAll(longNumberPattern)];
 		for (const match of longMatches) {
 			const num = match[0];
@@ -711,63 +732,47 @@ export function detectAndMask(
 			detectedPositions.push({ start, end });
 		}
 
-		// Find formatted phone numbers (check for overlaps with long numbers)
 		const phoneMatches = [...text.matchAll(phonePattern)];
 		for (const match of phoneMatches) {
 			const num = match[0];
 			const start = match.index ?? 0;
 			const end = start + num.length;
 
-			// Skip if this overlaps with already detected long number
-			const overlaps = detectedPositions.some(
-				(pos) =>
-					(start >= pos.start && start < pos.end) ||
-					(end > pos.start && end <= pos.end) ||
-					(start <= pos.start && end >= pos.end),
-			);
-
-			if (!overlaps) {
+			if (!overlapsExisting(start, end, detectedPositions)) {
 				numbers.push(num);
 				detectedPositions.push({ start, end });
 			}
 		}
 
-		// Find medium numbers (more conservative)
 		const mediumMatches = [...text.matchAll(mediumNumberPattern)];
 		for (const match of mediumMatches) {
 			const num = match[0];
 			const start = match.index ?? 0;
 			const end = start + num.length;
 
-			// Skip if overlaps with already detected numbers
-			const overlaps = detectedPositions.some(
-				(pos) =>
-					(start >= pos.start && start < pos.end) ||
-					(end > pos.start && end <= pos.end) ||
-					(start <= pos.start && end >= pos.end),
-			);
-
-			// Filter out years (1900-2099) and common non-PII patterns
 			const isYear = /^(19|20)\d{2}$/.test(num);
-			const isCommonNumber = num.length === 4 || num.length === 6; // More likely to be page/building numbers
+			const isCommonNumber = num.length === 4 || num.length === 6;
 
-			if (!overlaps && !isYear && !isCommonNumber) {
+			if (
+				!overlapsExisting(start, end, detectedPositions) &&
+				!isYear &&
+				!isCommonNumber
+			) {
 				numbers.push(num);
 				detectedPositions.push({ start, end });
 			}
 		}
 
 		if (numbers.length > 0) {
-			detected_entities.NUMBER = [...new Set(numbers)]; // Remove duplicates
+			detectedEntities.NUMBER = [...new Set(numbers)];
 
 			guardrailLogger.info("Numbers detected", {
-				entityCounts: { NUMBER: detected_entities.NUMBER.length },
+				entityCounts: { NUMBER: detectedEntities.NUMBER.length },
 			});
 
-			// Add all number positions to the global mask positions list
 			for (const pos of detectedPositions) {
 				const originalValue = text.substring(pos.start, pos.end);
-				allMaskPositions.push({
+				maskPositions.push({
 					...pos,
 					type: "NUMBER",
 					placeholder: "<NUMBER>",
@@ -778,7 +783,6 @@ export function detectAndMask(
 	}
 
 	// Pattern for email addresses (matches most common email formats)
-	// Masks all emails except the user's email
 	if (entitiesToDetect.includes("EMAIL")) {
 		const emailPattern = regex(
 			"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
@@ -794,7 +798,6 @@ export function detectAndMask(
 			const start = match.index ?? 0;
 			const end = start + email.length;
 
-			// Skip user's email if provided
 			if (userEmail && email.toLowerCase() === userEmail.toLowerCase()) {
 				continue;
 			}
@@ -804,16 +807,15 @@ export function detectAndMask(
 		}
 
 		if (emails.length > 0) {
-			detected_entities.EMAIL = [...new Set(emails)]; // Remove duplicates
+			detectedEntities.EMAIL = [...new Set(emails)];
 
 			guardrailLogger.info("Emails detected", {
-				entityCounts: { EMAIL: detected_entities.EMAIL.length },
+				entityCounts: { EMAIL: detectedEntities.EMAIL.length },
 			});
 
-			// Add all email positions to the global mask positions list
 			for (const pos of emailPositions) {
 				const originalValue = text.substring(pos.start, pos.end);
-				allMaskPositions.push({
+				maskPositions.push({
 					...pos,
 					type: "EMAIL",
 					placeholder: "<EMAIL>",
@@ -823,45 +825,60 @@ export function detectAndMask(
 		}
 	}
 
-	// Apply ALL masks in one pass (reverse order by position to preserve indices)
-	let maskedText = text;
-	if (allMaskPositions.length > 0) {
-		// Sort positions in reverse order (end to start) to avoid index shifting
-		const sortedPositions = allMaskPositions.sort((a, b) => b.start - a.start);
+	return { detectedEntities, maskPositions };
+}
 
-		for (const pos of sortedPositions) {
-			// Use TokenVault to generate unique placeholders if provided
-			const placeholder = tokenVault
-				? tokenVault.store(pos.type as GuardrailEntityType, pos.originalValue)
-				: pos.placeholder;
+/**
+ * Detect and mask Russian names, numbers, and emails in text
+ * Uses ArkRegex for pattern matching
+ * @param text - Text to detect and mask guardrails in
+ * @param enabledEntities - Array of entity types to detect (defaults to all if not provided)
+ * @param userEmail - Optional user email to exclude from masking
+ * @param context - Context for telemetry tracking (default: "other")
+ * @param tokenVault - Optional TokenVault to store original values for later unmasking
+ */
+export function detectAndMask(
+	text: string,
+	enabledEntities?: GuardrailEntityType[],
+	userEmail?: string,
+	context: "user_message" | "rag_chunk" | "middleware" | "other" = "other",
+	tokenVault?: TokenVault,
+): GuardrailDetectionResult {
+	const entitiesToDetect =
+		enabledEntities ||
+		(["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
 
-			maskedText =
-				maskedText.substring(0, pos.start) +
-				placeholder +
-				maskedText.substring(pos.end);
-		}
-	}
+	guardrailLogger.info("Starting detection", {
+		textLength: text.length,
+		entityTypes: entitiesToDetect,
+	});
 
+	const { detectedEntities, maskPositions } = collectRegexDetections(
+		text,
+		entitiesToDetect,
+		userEmail,
+	);
+	const maskedText = applyMaskPositions(text, maskPositions, tokenVault);
 	const result = {
-		detected_entities,
+		detected_entities: detectedEntities,
 		checked_text: maskedText,
 		detected:
-			(detected_entities.RUSSIAN_NAME?.length ?? 0) > 0 ||
-			(detected_entities.NUMBER?.length ?? 0) > 0 ||
-			(detected_entities.EMAIL?.length ?? 0) > 0,
+			(detectedEntities.RUSSIAN_NAME?.length ?? 0) > 0 ||
+			(detectedEntities.NUMBER?.length ?? 0) > 0 ||
+			(detectedEntities.EMAIL?.length ?? 0) > 0,
 	};
 
 	// Track telemetry
 	const entityTypes: GuardrailEntityType[] = Object.keys(
-		detected_entities,
+		detectedEntities,
 	).filter(
-		(key) => (detected_entities[key as GuardrailEntityType]?.length ?? 0) > 0,
+		(key) => (detectedEntities[key as GuardrailEntityType]?.length ?? 0) > 0,
 	) as GuardrailEntityType[];
 
 	const entityCounts: Record<GuardrailEntityType, number> = {
-		RUSSIAN_NAME: detected_entities.RUSSIAN_NAME?.length ?? 0,
-		NUMBER: detected_entities.NUMBER?.length ?? 0,
-		EMAIL: detected_entities.EMAIL?.length ?? 0,
+		RUSSIAN_NAME: detectedEntities.RUSSIAN_NAME?.length ?? 0,
+		NUMBER: detectedEntities.NUMBER?.length ?? 0,
+		EMAIL: detectedEntities.EMAIL?.length ?? 0,
 	};
 
 	trackDetection(
@@ -874,6 +891,115 @@ export function detectAndMask(
 	);
 
 	guardrailLogger.info("Detection complete", {
+		detected: result.detected,
+		entityTypes,
+		entityCounts,
+		textLength: text.length,
+		maskedLength: maskedText.length,
+	});
+
+	return result;
+}
+
+export async function detectAndMaskWithNer(
+	text: string,
+	enabledEntities?: GuardrailEntityType[],
+	userEmail?: string,
+	context: "user_message" | "rag_chunk" | "middleware" | "other" = "other",
+	tokenVault?: TokenVault,
+): Promise<GuardrailDetectionResult> {
+	const entitiesToDetect =
+		enabledEntities ||
+		(["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
+
+	guardrailLogger.info("Starting detection (NER)", {
+		textLength: text.length,
+		entityTypes: entitiesToDetect,
+		nerEnabled: Boolean(NER_SERVICE_URL),
+	});
+
+	const { detectedEntities, maskPositions } = collectRegexDetections(
+		text,
+		entitiesToDetect,
+		userEmail,
+	);
+
+	if (NER_SERVICE_URL && entitiesToDetect.includes("RUSSIAN_NAME") && text) {
+		try {
+			const nerSpans = await fetchNerSpans(text);
+			const existingPositions = maskPositions.map((pos) => ({
+				start: pos.start,
+				end: pos.end,
+			}));
+			const detectedNames = new Set(detectedEntities.RUSSIAN_NAME ?? []);
+
+			for (const span of nerSpans) {
+				if (!NER_NAME_LABELS.has(span.label)) {
+					continue;
+				}
+				if (!span.text || span.text.length < 3) {
+					continue;
+				}
+				if (isWhitelisted(span.text)) {
+					continue;
+				}
+				if (overlapsExisting(span.start, span.end, existingPositions)) {
+					continue;
+				}
+
+				detectedNames.add(span.text);
+				maskPositions.push({
+					start: span.start,
+					end: span.end,
+					type: "RUSSIAN_NAME",
+					placeholder: "<RUSSIAN_NAME>",
+					originalValue: span.text,
+				});
+				existingPositions.push({ start: span.start, end: span.end });
+			}
+
+			if (detectedNames.size > 0) {
+				detectedEntities.RUSSIAN_NAME = Array.from(detectedNames);
+			}
+		} catch (error) {
+			guardrailLogger.warn("NER service failed, continuing without NER", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
+	const maskedText = applyMaskPositions(text, maskPositions, tokenVault);
+	const result = {
+		detected_entities: detectedEntities,
+		checked_text: maskedText,
+		detected:
+			(detectedEntities.RUSSIAN_NAME?.length ?? 0) > 0 ||
+			(detectedEntities.NUMBER?.length ?? 0) > 0 ||
+			(detectedEntities.EMAIL?.length ?? 0) > 0,
+	};
+
+	const entityTypes: GuardrailEntityType[] = Object.keys(
+		detectedEntities,
+	).filter(
+		(key) => (detectedEntities[key as GuardrailEntityType]?.length ?? 0) > 0,
+	) as GuardrailEntityType[];
+
+	const entityCounts: Record<GuardrailEntityType, number> = {
+		RUSSIAN_NAME: detectedEntities.RUSSIAN_NAME?.length ?? 0,
+		NUMBER: detectedEntities.NUMBER?.length ?? 0,
+		EMAIL: detectedEntities.EMAIL?.length ?? 0,
+	};
+
+	trackDetection(
+		result.detected,
+		entityTypes,
+		entityCounts,
+		text.length,
+		maskedText.length,
+		context,
+	);
+
+	guardrailLogger.info("Detection complete (NER)", {
 		detected: result.detected,
 		entityTypes,
 		entityCounts,
