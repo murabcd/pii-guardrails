@@ -116,7 +116,20 @@ export function AppSidebar({ user }: { user: User | undefined }) {
 				<SidebarContent>
 					<SidebarHistory user={user} />
 				</SidebarContent>
-				<SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+				<SidebarFooter>
+					{user ? (
+						<SidebarUserNav user={user} />
+					) : (
+						<Button
+							asChild
+							className="w-full justify-center"
+							onClick={() => setOpenMobile(false)}
+							variant="secondary"
+						>
+							<Link href="/login">Log in</Link>
+						</Button>
+					)}
+				</SidebarFooter>
 			</Sidebar>
 
 			<AlertDialog
