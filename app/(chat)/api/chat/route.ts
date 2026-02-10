@@ -21,6 +21,7 @@ export async function POST(request: Request) {
 		messages,
 		selectedFilePathnames,
 		similarityThreshold = 1.0,
+		guardrailEnabledEntities,
 	} = await request.json();
 
 	const session = await auth();
@@ -30,7 +31,12 @@ export async function POST(request: Request) {
 	}
 
 	const startTime = Date.now();
-	const guardrailEntities = getDefaultGuardrailEntities();
+	const hasGuardrailsEnabled = Array.isArray(guardrailEnabledEntities)
+		? guardrailEnabledEntities.length > 0
+		: true;
+	const guardrailEntities = Array.isArray(guardrailEnabledEntities)
+		? guardrailEnabledEntities
+		: getDefaultGuardrailEntities();
 	const wideEvent: Record<string, unknown> = {
 		method: "POST",
 		route: "/api/chat",
@@ -38,14 +44,14 @@ export async function POST(request: Request) {
 		userEmail: session.user?.email ?? null,
 		fileCount: selectedFilePathnames?.length ?? 0,
 		similarityThreshold,
-		hasGuardrails: true,
-		guardrailEntities,
+		hasGuardrails: !!hasGuardrailsEnabled,
+		guardrailEntities: guardrailEntities ?? [],
 	};
 
 	try {
 		// Create TokenVault for storing PII mappings (needed for output unmasking)
-		const tokenVault = new TokenVault();
-		wideEvent.hasTokenVault = true;
+		const tokenVault = hasGuardrailsEnabled ? new TokenVault() : undefined;
+		wideEvent.hasTokenVault = !!tokenVault;
 
 		// Convert UIMessages to ModelMessages
 		const modelMessages = convertToModelMessages(messages);
@@ -113,7 +119,10 @@ export async function POST(request: Request) {
 				// NOW mask guardrails in the user message before sending to AI
 				// This ensures RAG can find documents, but AI doesn't see the guardrails
 				let maskedMessageText: string | null = null;
-				if (typeof lastUserMessageContent === "string") {
+				if (
+					hasGuardrailsEnabled &&
+					typeof lastUserMessageContent === "string"
+				) {
 					const maskedResult = await detectAndMaskWithNer(
 						lastUserMessageContent,
 						guardrailEntities,
@@ -148,22 +157,24 @@ export async function POST(request: Request) {
 
 					// CRITICAL SECURITY: Mask guardrails in RAG context chunks before sending to AI
 					// This ensures no guardrails from documents is sent to external LLM
-					const maskedChunks = await Promise.all(
-						rerankedChunks.map(async (chunk) => {
-							const maskedResult = await detectAndMaskWithNer(
-								chunk.content,
-								guardrailEntities,
-								session.user?.email ?? undefined,
-								"rag_chunk",
-								tokenVault,
-							);
+					const maskedChunks = hasGuardrailsEnabled
+						? await Promise.all(
+								rerankedChunks.map(async (chunk) => {
+									const maskedResult = await detectAndMaskWithNer(
+										chunk.content,
+										guardrailEntities,
+										session.user?.email ?? undefined,
+										"rag_chunk",
+										tokenVault,
+									);
 
-							return {
-								...chunk,
-								content: maskedResult.checked_text,
-							};
-						}),
-					);
+									return {
+										...chunk,
+										content: maskedResult.checked_text,
+									};
+								}),
+							)
+						: rerankedChunks;
 
 					maskedChunksCount = maskedChunks.filter(
 						(chunk, idx) => chunk.content !== rerankedChunks[idx]?.content,
@@ -189,18 +200,23 @@ export async function POST(request: Request) {
 			}
 		}
 
-		// Create model with guardrail middleware (always enabled)
-		const modelWithGuardrails = wrapLanguageModel({
-			model: baseModel,
-			middleware: createGuardrailMiddleware(
-				guardrailEntities,
-				session.user?.email ?? undefined,
-				tokenVault,
-			),
-		});
+		// Create model with guardrail middleware configured with user settings
+		const modelWithGuardrails = hasGuardrailsEnabled
+			? wrapLanguageModel({
+					model: baseModel,
+					middleware: createGuardrailMiddleware(
+						guardrailEntities,
+						session.user?.email ?? undefined,
+						tokenVault,
+					),
+				})
+			: baseModel;
 
 		// Build system prompt with guardrail-aware instructions
-		const systemPrompt = generateSystemPrompt(true, guardrailEntities);
+		const systemPrompt = generateSystemPrompt(
+			hasGuardrailsEnabled,
+			guardrailEntities,
+		);
 
 		const result = streamText({
 			model: modelWithGuardrails,
