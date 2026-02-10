@@ -1,0 +1,9 @@
+#!/bin/sh
+
+echo "Running type-check..."
+bun type-check
+
+if [ $? -ne 0 ]; then
+  echo "Type-check failed. Push aborted."
+  exit 1
+fi
