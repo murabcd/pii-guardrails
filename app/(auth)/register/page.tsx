@@ -24,7 +24,7 @@ export default function Page() {
 			toast.error("Failed to create account");
 		} else if (state.status === "success") {
 			toast.success("Account created successfully");
-			router.refresh();
+			router.replace("/");
 		}
 	}, [state, router]);
 

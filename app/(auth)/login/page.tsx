@@ -22,7 +22,7 @@ export default function Page() {
 		if (state.status === "failed") {
 			toast.error("Invalid credentials!");
 		} else if (state.status === "success") {
-			router.refresh();
+			router.replace("/");
 		}
 	}, [state.status, router]);
 
