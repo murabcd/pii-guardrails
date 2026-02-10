@@ -33,9 +33,6 @@ export class TokenVault {
 		// This ensures same PII gets same token across query and context
 		const existingPlaceholder = this.reverseVault.get(originalValue);
 		if (existingPlaceholder) {
-			console.log(
-				`[TokenVault] Reusing existing token: ${existingPlaceholder} for "${originalValue}" (vault size: ${this.vault.size})`,
-			);
 			return existingPlaceholder;
 		}
 
@@ -44,10 +41,6 @@ export class TokenVault {
 		const placeholder = `<${entityType}_${this.counters[entityType]}>`;
 		this.vault.set(placeholder, originalValue);
 		this.reverseVault.set(originalValue, placeholder);
-
-		console.log(
-			`[TokenVault] Stored NEW token: ${placeholder} -> "${originalValue}" (vault size: ${this.vault.size})`,
-		);
 
 		return placeholder;
 	}
@@ -59,27 +52,13 @@ export class TokenVault {
 	 */
 	unmask(text: string): string {
 		let unmaskedText = text;
-		let replacementCount = 0;
-
-		const placeholders = Array.from(this.vault.keys());
-		console.log(
-			`[TokenVault] Unmask started: vault size=${this.vault.size}, text="${text.substring(0, 100)}", placeholders=${JSON.stringify(placeholders)}`,
-		);
 
 		// Replace each placeholder with its original value
 		for (const [placeholder, originalValue] of this.vault.entries()) {
 			if (unmaskedText.includes(placeholder)) {
-				console.log(
-					`[TokenVault] Replacing: ${placeholder} -> "${originalValue}"`,
-				);
 				unmaskedText = unmaskedText.replaceAll(placeholder, originalValue);
-				replacementCount++;
 			}
 		}
-
-		console.log(
-			`[TokenVault] Unmask complete: replaced ${replacementCount}/${this.vault.size} placeholders`,
-		);
 
 		return unmaskedText;
 	}
