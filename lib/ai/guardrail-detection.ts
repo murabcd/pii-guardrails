@@ -234,6 +234,10 @@ const CYRILLIC_WHITELIST = new Set([
 	"мира",
 	"Аллея",
 	"аллея",
+	"Аллеи",
+	"аллеи",
+	"Аллее",
+	"аллее",
 	"Парковая",
 	"парковая",
 	"Поленова",
@@ -331,6 +335,14 @@ const CYRILLIC_WHITELIST = new Set([
 	"сосенский",
 	"Стан",
 	"стан",
+	"Квартал",
+	"квартал",
+	"Квартала",
+	"квартала",
+	"Проезд",
+	"проезд",
+	"Проезда",
+	"проезда",
 	// Directions and locations
 	"Северная",
 	"северная",
@@ -461,6 +473,43 @@ function isWhitelisted(word: string): boolean {
 	return CYRILLIC_WHITELIST.has(word);
 }
 
+const TOPONYM_ENDINGS = [
+	"ская",
+	"ский",
+	"ское",
+	"ском",
+	"ской",
+	"ского",
+	"ских",
+	"стан",
+];
+
+const DATE_SPAN_PATTERN = regex("\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b", "g");
+const TIME_SPAN_PATTERN = regex("\\b\\d{1,2}:\\d{2}\\b", "g");
+const MONEY_SPAN_PATTERN =
+	/\b\d+(?:[\s,]\d{3})*(?:[.,]\d+)?\s?(?:руб|₽|RUB|USD|EUR|\$|€)\b/gi;
+
+function collectSpans(pattern: RegExp, text: string) {
+	return [...text.matchAll(pattern)].map((match) => ({
+		start: match.index ?? 0,
+		end: (match.index ?? 0) + match[0].length,
+	}));
+}
+
+function overlapsAnySpan(
+	start: number,
+	end: number,
+	spans: Array<{ start: number; end: number }>,
+): boolean {
+	return spans.some((span) => start < span.end && end > span.start);
+}
+
+function looksLikeToponym(word: string): boolean {
+	const lower = word.toLowerCase();
+	return TOPONYM_ENDINGS.some((ending) => lower.endsWith(ending));
+}
+
+
 type MaskPosition = {
 	start: number;
 	end: number;
@@ -554,14 +603,18 @@ function collectRegexDetections(
 	text: string,
 	entitiesToDetect: GuardrailEntityType[],
 	userEmail?: string,
+	suppressRegexNames: boolean = false,
 ): RegexDetectionResult {
 	const detectedEntities: GuardrailDetectionResult["detected_entities"] = {};
 	const maskPositions: MaskPosition[] = [];
+	const dateSpans = collectSpans(DATE_SPAN_PATTERN, text);
+	const timeSpans = collectSpans(TIME_SPAN_PATTERN, text);
+	const moneySpans = collectSpans(MONEY_SPAN_PATTERN, text);
 
 	// Pattern for Russian names (Cyrillic characters, typically 2-3 words capitalized)
 	// CONSERVATIVE APPROACH: Only detect clear name patterns to avoid false positives
 	// Russian names are almost always capitalized, so we focus on that
-	if (entitiesToDetect.includes("RUSSIAN_NAME")) {
+	if (entitiesToDetect.includes("RUSSIAN_NAME") && !suppressRegexNames) {
 		// Match EXACTLY 2 or 3 capitalized Cyrillic words (typical Russian name patterns)
 		// Examples: "Иван Иванов", "Иван Сергеевич Иванов"
 		// This is MUCH more conservative than matching any multi-word sequence
@@ -588,11 +641,12 @@ function collectRegexDetections(
 			// Check if any word in the sequence is whitelisted
 			const words = name.split(/\s+/);
 			const hasWhitelistedWord = words.some((word) => isWhitelisted(word));
+			const hasToponymWord = words.some((word) => looksLikeToponym(word));
 
 			// Additional check: All words should be at least 3 characters (typical name length)
 			const allWordsValid = words.every((word) => word.length >= 3);
 
-			if (!hasWhitelistedWord && allWordsValid) {
+			if (!hasWhitelistedWord && !hasToponymWord && allWordsValid) {
 				russianNames.push(name);
 				maskedPositions.push({ start, end });
 			}
@@ -612,11 +666,12 @@ function collectRegexDetections(
 			// Check if any word is whitelisted
 			const words = name.split(/\s+/);
 			const hasWhitelistedWord = words.some((word) => isWhitelisted(word));
+			const hasToponymWord = words.some((word) => looksLikeToponym(word));
 
 			// Additional check: Both words should be at least 3 characters
 			const allWordsValid = words.every((word) => word.length >= 3);
 
-			if (!hasWhitelistedWord && allWordsValid) {
+			if (!hasWhitelistedWord && !hasToponymWord && allWordsValid) {
 				russianNames.push(name);
 				maskedPositions.push({ start, end });
 			}
@@ -651,6 +706,9 @@ function collectRegexDetections(
 
 				// Check if whitelisted
 				if (isWhitelisted(name)) {
+					continue;
+				}
+				if (looksLikeToponym(name)) {
 					continue;
 				}
 
@@ -728,6 +786,13 @@ function collectRegexDetections(
 			const num = match[0];
 			const start = match.index ?? 0;
 			const end = start + num.length;
+			if (
+				overlapsAnySpan(start, end, dateSpans) ||
+				overlapsAnySpan(start, end, timeSpans) ||
+				overlapsAnySpan(start, end, moneySpans)
+			) {
+				continue;
+			}
 			numbers.push(num);
 			detectedPositions.push({ start, end });
 		}
@@ -738,7 +803,12 @@ function collectRegexDetections(
 			const start = match.index ?? 0;
 			const end = start + num.length;
 
-			if (!overlapsExisting(start, end, detectedPositions)) {
+			if (
+				!overlapsExisting(start, end, detectedPositions) &&
+				!overlapsAnySpan(start, end, dateSpans) &&
+				!overlapsAnySpan(start, end, timeSpans) &&
+				!overlapsAnySpan(start, end, moneySpans)
+			) {
 				numbers.push(num);
 				detectedPositions.push({ start, end });
 			}
@@ -756,7 +826,10 @@ function collectRegexDetections(
 			if (
 				!overlapsExisting(start, end, detectedPositions) &&
 				!isYear &&
-				!isCommonNumber
+				!isCommonNumber &&
+				!overlapsAnySpan(start, end, dateSpans) &&
+				!overlapsAnySpan(start, end, timeSpans) &&
+				!overlapsAnySpan(start, end, moneySpans)
 			) {
 				numbers.push(num);
 				detectedPositions.push({ start, end });
@@ -857,6 +930,7 @@ export function detectAndMask(
 		text,
 		entitiesToDetect,
 		userEmail,
+		false,
 	);
 	const maskedText = applyMaskPositions(text, maskPositions, tokenVault);
 	const result = {
@@ -922,6 +996,7 @@ export async function detectAndMaskWithNer(
 		text,
 		entitiesToDetect,
 		userEmail,
+		Boolean(NER_SERVICE_URL) && entitiesToDetect.includes("RUSSIAN_NAME"),
 	);
 
 	if (NER_SERVICE_URL && entitiesToDetect.includes("RUSSIAN_NAME") && text) {

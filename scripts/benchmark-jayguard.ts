@@ -206,19 +206,18 @@ async function evaluateSample(
 
 	// Run your detector
 	const useNer = process.env.USE_NER === "true";
+	const onlyNames = process.env.BENCH_ONLY_NAMES === "true";
+	const enabledEntities = onlyNames
+		? (["RUSSIAN_NAME"] as GuardrailEntityType[])
+		: (["RUSSIAN_NAME", "NUMBER", "EMAIL"] as GuardrailEntityType[]);
 	const detectionResult = useNer
 		? await detectAndMaskWithNer(
 				originalText,
-				["RUSSIAN_NAME", "NUMBER", "EMAIL"],
+				enabledEntities,
 				undefined,
 				"other",
 			)
-		: detectAndMask(
-				originalText,
-				["RUSSIAN_NAME", "NUMBER", "EMAIL"],
-				undefined,
-				"other",
-			);
+		: detectAndMask(originalText, enabledEntities, undefined, "other");
 
 	// Collect all detected entities
 	const allDetected: Array<{ text: string; type: GuardrailEntityType }> = [];
@@ -658,7 +657,9 @@ function provideRecommendations(results: BenchmarkResults): void {
 async function main() {
 	console.log("🚀 JayGuard Benchmark Evaluation\n");
 	const useNer = process.env.USE_NER === "true";
-	console.log(`🔬 NER mode: ${useNer ? "enabled" : "disabled"}\n`);
+	const onlyNames = process.env.BENCH_ONLY_NAMES === "true";
+	console.log(`🔬 NER mode: ${useNer ? "enabled" : "disabled"}`);
+	console.log(`🧪 Entities: ${onlyNames ? "RUSSIAN_NAME only" : "all"}\n`);
 
 	// Load benchmark data
 	const jsonPath = path.join(
