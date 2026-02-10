@@ -1,12 +1,15 @@
 import { convertToModelMessages, streamText, wrapLanguageModel } from "ai";
 import { auth } from "@/app/(auth)/auth";
-import { customModel } from "@/lib/ai";
+import { baseModel } from "@/lib/ai";
 import {
 	generateContextInstruction,
 	generateSystemPrompt,
 } from "@/lib/ai/guardrail-prompt-utils";
-import type { GuardrailEntityType } from "@/lib/ai/guardrails";
-import { detectAndMaskWithNer, TokenVault } from "@/lib/ai/guardrails";
+import {
+	detectAndMaskWithNer,
+	getDefaultGuardrailEntities,
+	TokenVault,
+} from "@/lib/ai/guardrails";
 import { guardrailLogger } from "@/lib/ai/logger";
 import { createGuardrailMiddleware } from "@/lib/ai/middleware/guardrail";
 import { rerankDocuments } from "@/lib/ai/reranker";
@@ -18,7 +21,6 @@ export async function POST(request: Request) {
 		messages,
 		selectedFilePathnames,
 		similarityThreshold = 1.0,
-		guardrailEnabledEntities,
 	} = await request.json();
 
 	const session = await auth();
@@ -28,8 +30,7 @@ export async function POST(request: Request) {
 	}
 
 	const startTime = Date.now();
-	const hasGuardrailsEnabled =
-		guardrailEnabledEntities && guardrailEnabledEntities.length > 0;
+	const guardrailEntities = getDefaultGuardrailEntities();
 	const wideEvent: Record<string, unknown> = {
 		method: "POST",
 		route: "/api/chat",
@@ -37,14 +38,14 @@ export async function POST(request: Request) {
 		userEmail: session.user?.email ?? null,
 		fileCount: selectedFilePathnames?.length ?? 0,
 		similarityThreshold,
-		hasGuardrails: !!hasGuardrailsEnabled,
-		guardrailEntities: guardrailEnabledEntities ?? [],
+		hasGuardrails: true,
+		guardrailEntities,
 	};
 
 	try {
 		// Create TokenVault for storing PII mappings (needed for output unmasking)
-		const tokenVault = hasGuardrailsEnabled ? new TokenVault() : undefined;
-		wideEvent.hasTokenVault = !!tokenVault;
+		const tokenVault = new TokenVault();
+		wideEvent.hasTokenVault = true;
 
 		// Convert UIMessages to ModelMessages
 		const modelMessages = convertToModelMessages(messages);
@@ -112,13 +113,10 @@ export async function POST(request: Request) {
 				// NOW mask guardrails in the user message before sending to AI
 				// This ensures RAG can find documents, but AI doesn't see the guardrails
 				let maskedMessageText: string | null = null;
-				if (
-					hasGuardrailsEnabled &&
-					typeof lastUserMessageContent === "string"
-				) {
+				if (typeof lastUserMessageContent === "string") {
 					const maskedResult = await detectAndMaskWithNer(
 						lastUserMessageContent,
-						guardrailEnabledEntities as GuardrailEntityType[],
+						guardrailEntities,
 						session.user?.email ?? undefined,
 						"user_message",
 						tokenVault,
@@ -150,24 +148,22 @@ export async function POST(request: Request) {
 
 					// CRITICAL SECURITY: Mask guardrails in RAG context chunks before sending to AI
 					// This ensures no guardrails from documents is sent to external LLM
-					const maskedChunks = hasGuardrailsEnabled
-						? await Promise.all(
-								rerankedChunks.map(async (chunk) => {
-									const maskedResult = await detectAndMaskWithNer(
-										chunk.content,
-										guardrailEnabledEntities as GuardrailEntityType[],
-										session.user?.email ?? undefined,
-										"rag_chunk",
-										tokenVault,
-									);
+					const maskedChunks = await Promise.all(
+						rerankedChunks.map(async (chunk) => {
+							const maskedResult = await detectAndMaskWithNer(
+								chunk.content,
+								guardrailEntities,
+								session.user?.email ?? undefined,
+								"rag_chunk",
+								tokenVault,
+							);
 
-									return {
-										...chunk,
-										content: maskedResult.checked_text,
-									};
-								}),
-							)
-						: rerankedChunks;
+							return {
+								...chunk,
+								content: maskedResult.checked_text,
+							};
+						}),
+					);
 
 					maskedChunksCount = maskedChunks.filter(
 						(chunk, idx) => chunk.content !== rerankedChunks[idx]?.content,
@@ -176,7 +172,7 @@ export async function POST(request: Request) {
 					// Generate context instruction with dynamic placeholders
 					const contextInstruction = generateContextInstruction(
 						hasMaskedGuardrails,
-						guardrailEnabledEntities as GuardrailEntityType[],
+						guardrailEntities,
 					);
 
 					const contextText = [
@@ -193,24 +189,18 @@ export async function POST(request: Request) {
 			}
 		}
 
-		// Create model with guardrail middleware configured with user settings
-		// Only create middleware if entities array exists and has at least one entity
-		const modelWithGuardrails = hasGuardrailsEnabled
-			? wrapLanguageModel({
-					model: customModel,
-					middleware: createGuardrailMiddleware(
-						guardrailEnabledEntities as GuardrailEntityType[],
-						session.user?.email ?? undefined,
-						tokenVault,
-					),
-				})
-			: customModel;
+		// Create model with guardrail middleware (always enabled)
+		const modelWithGuardrails = wrapLanguageModel({
+			model: baseModel,
+			middleware: createGuardrailMiddleware(
+				guardrailEntities,
+				session.user?.email ?? undefined,
+				tokenVault,
+			),
+		});
 
 		// Build system prompt with guardrail-aware instructions
-		const systemPrompt = generateSystemPrompt(
-			hasGuardrailsEnabled,
-			guardrailEnabledEntities as GuardrailEntityType[],
-		);
+		const systemPrompt = generateSystemPrompt(true, guardrailEntities);
 
 		const result = streamText({
 			model: modelWithGuardrails,
