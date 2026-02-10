@@ -8,11 +8,26 @@ import { chat, chunk, document, user } from "@/lib/db/schema";
 // use the Drizzle adapter for Auth.js / NextAuth
 // https://authjs.dev/reference/adapter/drizzle
 const postgresUrl = process.env.POSTGRES_URL;
-if (!postgresUrl) {
-	throw new Error("POSTGRES_URL environment variable is required");
+let cachedDb: ReturnType<typeof drizzle> | null = null;
+
+function getDb() {
+	if (cachedDb) {
+		return cachedDb;
+	}
+	if (!postgresUrl) {
+		throw new Error("POSTGRES_URL environment variable is required");
+	}
+	const client = postgres(`${postgresUrl}?sslmode=require`);
+	cachedDb = drizzle(client);
+	return cachedDb;
 }
-const client = postgres(`${postgresUrl}?sslmode=require`);
-export const db = drizzle(client);
+
+export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+	get(_target, prop) {
+		const database = getDb();
+		return (database as unknown as Record<PropertyKey, unknown>)[prop];
+	},
+});
 
 export async function getUser(email: string) {
 	return await db.select().from(user).where(eq(user.email, email));
