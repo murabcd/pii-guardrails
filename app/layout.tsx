@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	metadataBase: new URL("https://pii-rag.vercel.app"),
+	metadataBase: new URL("https://pii-guardrails.vercel.app"),
 	title: "RAG",
 	description: "Masked PII RAG using Next.js and AI SDK",
 	icons: {

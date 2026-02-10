@@ -1,5 +1,5 @@
 {
-	"name": "pii-rag",
+	"name": "pii-guardrails",
 	"version": "0.6.0",
 	"private": true,
 	"scripts": {

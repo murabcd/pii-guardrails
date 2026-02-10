@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from natasha import Doc, NewsEmbedding, NewsNERTagger, Segmenter
 
-app = FastAPI(title="pii-rag-ner", version="0.1.0")
+app = FastAPI(title="pii-guardrails-ner", version="0.1.0")
 
 segmenter = Segmenter()
 emb = NewsEmbedding()

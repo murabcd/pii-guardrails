@@ -314,7 +314,9 @@ function calculateMetrics(tp: number, fp: number, fn: number): EntityMetrics {
 /**
  * Run benchmark evaluation
  */
-async function runBenchmark(samples: BenchmarkSample[]): Promise<BenchmarkResults> {
+async function runBenchmark(
+	samples: BenchmarkSample[],
+): Promise<BenchmarkResults> {
 	console.log(`\n🚀 Running benchmark on ${samples.length} samples...\n`);
 
 	const detailedResults: DetectionResult[] = [];

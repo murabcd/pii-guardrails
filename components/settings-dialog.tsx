@@ -33,10 +33,10 @@ import { Slider } from "@/components/ui/slider";
 import type { GuardrailEntityType } from "@/lib/ai/guardrails";
 import { GUARDRAIL_ENTITIES } from "@/lib/ai/guardrails";
 
-type SettingsSection = "rag" | "guardrails";
+type SettingsSection = "settings" | "guardrails";
 
 const settingsNav = [
-	{ name: "RAG Settings", icon: Database, id: "rag" as SettingsSection },
+	{ name: "Settings", icon: Database, id: "settings" as SettingsSection },
 	{ name: "Guardrails", icon: Shield, id: "guardrails" as SettingsSection },
 ];
 
@@ -63,7 +63,7 @@ export function SettingsDialog({
 	const open = openProp ?? internalOpen;
 	const setOpen = onOpenChangeProp ?? setInternalOpen;
 	const [activeSection, setActiveSection] =
-		React.useState<SettingsSection>("rag");
+		React.useState<SettingsSection>("settings");
 	const [localThreshold, setLocalThreshold] =
 		React.useState(similarityThreshold);
 	const [localEntities, setLocalEntities] =
@@ -100,7 +100,7 @@ export function SettingsDialog({
 		}
 	};
 
-	const renderRAGSettings = () => (
+	const renderSettings = () => (
 		<div className="grid gap-4 py-4">
 			<div className="grid gap-2">
 				<Label htmlFor="similarity-threshold" className="text-sm font-medium">
@@ -172,8 +172,8 @@ export function SettingsDialog({
 
 	const renderContent = () => {
 		switch (activeSection) {
-			case "rag":
-				return renderRAGSettings();
+			case "settings":
+				return renderSettings();
 			case "guardrails":
 				return renderGuardrailsSettings();
 			default:

@@ -1,6 +1,6 @@
-<a href="https://pii-rag.vercel.app">
+<a href="https://pii-guardrails.vercel.app">
   <img alt="VibeStack - End-to-End Coding Platform" src="./public/preview/rag.png">
-  <h1 align="center">PII RAG</h1>
+  <h1 align="center">PII GUARDRAILS</h1>
 </a>
 
 <p align="center">
@@ -45,7 +45,7 @@ This app ships with [OpenAI](https://openai.com/) provider as the default. Howev
 
 You can deploy your own version of VibeStack to Vercel with one click:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmurad-pc%2Fpii-sdk&env=OPENAI_API_KEY,AUTH_SECRET,BLOB_READ_WRITE_TOKEN,POSTGRES_URL&envDescription=Required%20environment%20variables%20for%20PII%20RAG&envLink=https%3A%2F%2Fgithub.com%2Fmurad-pc%2Fpii-sdk%2Fblob%2Fmain%2F.env.example&demo-title=PII%20RAG&demo-description=A%20secure%20RAG%20system%20that%20processes%20PDF%20documents%20with%20PII%20masking%20capabilities&demo-url=https%3A%2F%2Fpii-rag.vercel.app)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmurad-pc%2Fpii-sdk&env=OPENAI_API_KEY,AUTH_SECRET,BLOB_READ_WRITE_TOKEN,POSTGRES_URL&envDescription=Required%20environment%20variables%20for%20PII%20RAG&envLink=https%3A%2F%2Fgithub.com%2Fmurad-pc%2Fpii-sdk%2Fblob%2Fmain%2F.env.example&demo-title=PII%20RAG&demo-description=A%20secure%20RAG%20system%20that%20processes%20PDF%20documents%20with%20PII%20masking%20capabilities&demo-url=https%3A%2F%2Fpii-guardrails.vercel.app)
 
 ## Running locally
 
