@@ -1,5 +1,5 @@
 <a href="https://pii-guardrails.vercel.app">
-  <img alt="VibeStack - End-to-End Coding Platform" src="./public/preview/rag.png">
+  <img alt="VibeStack - End-to-End Coding Platform" src="./public/preview/pii.png">
   <h1 align="center">PII GUARDRAILS</h1>
 </a>
 
