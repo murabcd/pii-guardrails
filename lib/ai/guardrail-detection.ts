@@ -509,7 +509,6 @@ function looksLikeToponym(word: string): boolean {
 	return TOPONYM_ENDINGS.some((ending) => lower.endsWith(ending));
 }
 
-
 type MaskPosition = {
 	start: number;
 	end: number;

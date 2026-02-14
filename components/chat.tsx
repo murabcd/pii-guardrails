@@ -16,6 +16,7 @@ import { useSettings } from "@/components/settings-provider";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Textarea } from "@/components/ui/textarea";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
+import type { GuardrailMessageMetadata } from "@/lib/ai/guardrail-ui";
 
 const suggestedActions = [
 	{
@@ -155,6 +156,10 @@ export function Chat({
 									?.filter((part) => part.type === "text")
 									.map((part) => part.text)
 									.join("") || ""
+							}
+							guardrail={
+								(message.metadata as GuardrailMessageMetadata | undefined)
+									?.guardrail
 							}
 						/>
 					))}

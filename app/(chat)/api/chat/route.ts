@@ -1,10 +1,20 @@
-import { convertToModelMessages, streamText, wrapLanguageModel } from "ai";
+import {
+	convertToModelMessages,
+	createUIMessageStream,
+	createUIMessageStreamResponse,
+	streamText,
+	wrapLanguageModel,
+} from "ai";
 import { auth } from "@/app/(auth)/auth";
 import { baseModel } from "@/lib/ai";
 import {
 	generateContextInstruction,
 	generateSystemPrompt,
 } from "@/lib/ai/guardrail-prompt-utils";
+import type {
+	GuardrailMessageMetadata,
+	GuardrailUiSummary,
+} from "@/lib/ai/guardrail-ui";
 import {
 	detectAndMaskWithNer,
 	getDefaultGuardrailEntities,
@@ -67,7 +77,6 @@ export async function POST(request: Request) {
 		let maskedChunksCount = 0;
 		let chunksFound = 0;
 		let rerankedCount = 0;
-
 		// Implement RAG if files are selected
 		if (selectedFilePathnames?.length > 0) {
 			const lastMessage = modelMessages[modelMessages.length - 1];
@@ -228,9 +237,38 @@ export async function POST(request: Request) {
 			},
 		});
 
-		const response = result.toUIMessageStreamResponse({
+		const guardrailSummary: GuardrailUiSummary = {
+			enabled: hasGuardrailsEnabled,
+			status: hasGuardrailsEnabled ? "pending" : "pass",
+			detected: false,
+			entityCounts: {
+				RUSSIAN_NAME: 0,
+				NUMBER: 0,
+				EMAIL: 0,
+			},
+			maskedChunksCount,
+			maskedUserMessage: maskedMessageDetected,
+			enabledEntities: guardrailEntities,
+		};
+
+		const getGuardrailMetadata = (): GuardrailMessageMetadata => ({
+			guardrail: {
+				...guardrailSummary,
+				entityCounts: { ...guardrailSummary.entityCounts },
+				enabledEntities: [...guardrailSummary.enabledEntities],
+			},
+		});
+
+		const baseStream = result.toUIMessageStream({
 			originalMessages: messages,
 			generateMessageId: () => crypto.randomUUID(),
+			messageMetadata: () =>
+				hasGuardrailsEnabled ? getGuardrailMetadata() : undefined,
+		});
+
+		const stream = createUIMessageStream({
+			originalMessages: messages,
+			generateId: () => crypto.randomUUID(),
 			onFinish: async ({ messages: allMessages }) => {
 				await createMessage({
 					id,
@@ -238,7 +276,51 @@ export async function POST(request: Request) {
 					author: session.user?.email ?? "",
 				});
 			},
+			execute: async ({ writer }) => {
+				let responseText = "";
+
+				for await (const chunk of baseStream) {
+					if (chunk.type === "text-delta" && typeof chunk.delta === "string") {
+						responseText += chunk.delta;
+					}
+					writer.write(chunk);
+				}
+
+				if (!hasGuardrailsEnabled) {
+					return;
+				}
+
+				const unmaskedResponseText = tokenVault
+					? tokenVault.unmask(responseText)
+					: responseText;
+
+				if (unmaskedResponseText) {
+					const detection = await detectAndMaskWithNer(
+						unmaskedResponseText,
+						guardrailEntities,
+						session.user?.email ?? undefined,
+						"other",
+					);
+
+					guardrailSummary.detected = detection.detected;
+					guardrailSummary.status = detection.detected ? "fail" : "pass";
+					guardrailSummary.entityCounts = {
+						RUSSIAN_NAME: detection.detected_entities.RUSSIAN_NAME?.length ?? 0,
+						NUMBER: detection.detected_entities.NUMBER?.length ?? 0,
+						EMAIL: detection.detected_entities.EMAIL?.length ?? 0,
+					};
+				} else {
+					guardrailSummary.status = "pass";
+				}
+
+				writer.write({
+					type: "message-metadata",
+					messageMetadata: getGuardrailMetadata(),
+				});
+			},
 		});
+
+		const response = createUIMessageStreamResponse({ stream });
 
 		wideEvent.maskedMessageDetected = maskedMessageDetected;
 		wideEvent.maskedChunks = maskedChunksCount;

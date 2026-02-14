@@ -3,16 +3,20 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { SparklesIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import type { GuardrailUiSummary } from "@/lib/ai/guardrail-ui";
 import { cn } from "@/lib/utils";
+import { GuardrailIndicator } from "./guardrail-indicator";
 import { Markdown } from "./markdown";
 import { Shimmer } from "./shimmer";
 
 export const Message = ({
 	role,
 	content,
+	guardrail,
 }: {
 	role: string;
 	content: string | ReactNode;
+	guardrail?: GuardrailUiSummary;
 }) => {
 	return (
 		<AnimatePresence key={role}>
@@ -51,6 +55,11 @@ export const Message = ({
 								<Markdown>{content as string}</Markdown>
 							</div>
 						</motion.div>
+						{role === "assistant" && guardrail?.enabled ? (
+							<div className="pb-2">
+								<GuardrailIndicator summary={guardrail} />
+							</div>
+						) : null}
 					</div>
 				</div>
 			</motion.div>
